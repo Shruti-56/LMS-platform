@@ -1,0 +1,281 @@
+import React, { useState, useMemo } from 'react';
+import { useParams, Link, Navigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { mockCourses, calculateCourseProgress, calculateModuleProgress } from '@/data/mockData';
+import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { toast } from '@/hooks/use-toast';
+import { 
+  PlayCircle, 
+  CheckCircle,
+  Circle,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  ArrowLeft,
+  Lock
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+const CourseDetail: React.FC = () => {
+  const { courseId } = useParams<{ courseId: string }>();
+  const { currentStudent, updateStudentData } = useAuth();
+  const [expandedModules, setExpandedModules] = useState<string[]>([]);
+  const [currentVideo, setCurrentVideo] = useState<{ moduleId: string; videoId: string } | null>(null);
+
+  // TODO: Fetch course details from API when backend is connected
+  const course = mockCourses.find(c => c.id === courseId);
+  const isPurchased = currentStudent?.purchasedCourses.includes(courseId || '');
+
+  // Redirect if course not found
+  if (!course) {
+    return <Navigate to="/student/marketplace" />;
+  }
+
+  // Get progress data
+  const courseProgress = currentStudent?.progress[course.id];
+  const completedVideos = courseProgress?.completedVideos || [];
+  const progress = calculateCourseProgress(course, completedVideos);
+
+  // Initialize first video if none selected
+  useMemo(() => {
+    if (!currentVideo && course.modules.length > 0 && course.modules[0].videos.length > 0) {
+      setCurrentVideo({
+        moduleId: course.modules[0].id,
+        videoId: course.modules[0].videos[0].id
+      });
+      setExpandedModules([course.modules[0].id]);
+    }
+  }, [course]);
+
+  const toggleModule = (moduleId: string) => {
+    setExpandedModules(prev =>
+      prev.includes(moduleId)
+        ? prev.filter(id => id !== moduleId)
+        : [...prev, moduleId]
+    );
+  };
+
+  const isVideoCompleted = (videoId: string) => completedVideos.includes(videoId);
+
+  const handleVideoClick = (moduleId: string, videoId: string) => {
+    if (!isPurchased) {
+      toast({
+        title: "Course not purchased",
+        description: "Please purchase this course to access the content.",
+        variant: "destructive"
+      });
+      return;
+    }
+    setCurrentVideo({ moduleId, videoId });
+  };
+
+  const handleMarkComplete = () => {
+    if (!currentVideo || !currentStudent || !courseId) return;
+
+    const videoId = currentVideo.videoId;
+    
+    if (isVideoCompleted(videoId)) {
+      // Unmark as complete
+      const updatedCompletedVideos = completedVideos.filter(v => v !== videoId);
+      updateStudentData({
+        ...currentStudent,
+        progress: {
+          ...currentStudent.progress,
+          [courseId]: {
+            completedVideos: updatedCompletedVideos,
+            lastWatched: videoId
+          }
+        }
+      });
+    } else {
+      // Mark as complete
+      updateStudentData({
+        ...currentStudent,
+        progress: {
+          ...currentStudent.progress,
+          [courseId]: {
+            completedVideos: [...completedVideos, videoId],
+            lastWatched: videoId
+          }
+        }
+      });
+
+      toast({
+        title: "Video Completed! 🎉",
+        description: "Great job! Keep up the momentum."
+      });
+    }
+  };
+
+  const getCurrentVideoData = () => {
+    if (!currentVideo) return null;
+    const module = course.modules.find(m => m.id === currentVideo.moduleId);
+    const video = module?.videos.find(v => v.id === currentVideo.videoId);
+    return { module, video };
+  };
+
+  const currentVideoData = getCurrentVideoData();
+
+  return (
+    <div className="animate-fade-in">
+      {/* Back Button */}
+      <Link 
+        to="/student/my-courses" 
+        className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to My Courses
+      </Link>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Video Player Section */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Video Player Placeholder */}
+          <div className="bg-foreground/5 rounded-xl overflow-hidden aspect-video relative">
+            {!isPurchased ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-foreground/10 backdrop-blur-sm">
+                <div className="text-center">
+                  <Lock className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-foreground font-medium mb-4">Purchase to unlock this course</p>
+                  <Link to="/student/marketplace">
+                    <Button>View in Marketplace</Button>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="absolute inset-0 gradient-hero flex items-center justify-center">
+                <div className="text-center">
+                  <PlayCircle className="w-16 h-16 text-primary-foreground mb-4 mx-auto" />
+                  <p className="text-primary-foreground font-medium">
+                    {currentVideoData?.video?.title || 'Select a video'}
+                  </p>
+                  <p className="text-primary-foreground/60 text-sm mt-1">
+                    {/* TODO: Replace with actual video player (e.g., react-player) */}
+                    Video player placeholder
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Current Video Info */}
+          {isPurchased && currentVideoData?.video && (
+            <div className="bg-card rounded-xl border border-border p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm text-primary font-medium mb-1">
+                    {currentVideoData.module?.title}
+                  </p>
+                  <h2 className="text-xl font-semibold text-foreground mb-2">
+                    {currentVideoData.video.title}
+                  </h2>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Clock className="w-4 h-4" />
+                    {currentVideoData.video.duration}
+                  </div>
+                </div>
+                <Button
+                  variant={isVideoCompleted(currentVideoData.video.id) ? "secondary" : "success"}
+                  onClick={handleMarkComplete}
+                  className="gap-2"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  {isVideoCompleted(currentVideoData.video.id) ? 'Completed' : 'Mark Complete'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Course Curriculum */}
+        <div className="space-y-4">
+          {/* Course Header */}
+          <div className="bg-card rounded-xl border border-border p-4">
+            <h1 className="text-lg font-semibold text-foreground mb-2">{course.title}</h1>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Course Progress</span>
+                <span className="font-semibold text-foreground">{progress}%</span>
+              </div>
+              <Progress value={progress} className="h-2" indicatorClassName="gradient-success" />
+            </div>
+          </div>
+
+          {/* Modules List */}
+          <div className="bg-card rounded-xl border border-border overflow-hidden">
+            <div className="divide-y divide-border">
+              {course.modules.map((module) => {
+                const moduleProgress = calculateModuleProgress(module, completedVideos);
+                const isExpanded = expandedModules.includes(module.id);
+
+                return (
+                  <div key={module.id}>
+                    {/* Module Header */}
+                    <button
+                      onClick={() => toggleModule(module.id)}
+                      className="w-full px-4 py-4 flex items-center gap-3 hover:bg-muted/50 transition-colors text-left"
+                    >
+                      {isExpanded ? (
+                        <ChevronDown className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-foreground text-sm truncate">
+                          {module.title}
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {module.videos.length} videos • {moduleProgress}% complete
+                        </p>
+                      </div>
+                    </button>
+
+                    {/* Videos List */}
+                    {isExpanded && (
+                      <div className="bg-muted/30 divide-y divide-border">
+                        {module.videos.map((video) => {
+                          const isCompleted = isVideoCompleted(video.id);
+                          const isActive = currentVideo?.videoId === video.id;
+
+                          return (
+                            <button
+                              key={video.id}
+                              onClick={() => handleVideoClick(module.id, video.id)}
+                              className={cn(
+                                "w-full px-4 py-3 flex items-center gap-3 hover:bg-muted/50 transition-colors text-left",
+                                isActive && "bg-primary/5 border-l-2 border-l-primary"
+                              )}
+                            >
+                              {isCompleted ? (
+                                <CheckCircle className="w-4 h-4 text-success flex-shrink-0" />
+                              ) : (
+                                <Circle className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className={cn(
+                                  "text-sm truncate",
+                                  isActive ? "text-primary font-medium" : "text-foreground"
+                                )}>
+                                  {video.title}
+                                </p>
+                                <p className="text-xs text-muted-foreground">{video.duration}</p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default CourseDetail;
