@@ -19,12 +19,12 @@ interface StudentLayoutProps {
 }
 
 const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
-  const { currentStudent, logout } = useAuth();
+  const { profile, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await signOut();
     navigate('/login');
   };
 
@@ -82,7 +82,7 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center">
                 <span className="text-sm font-medium text-secondary-foreground">
-                  {currentStudent?.name.charAt(0) || 'S'}
+                  {profile?.full_name?.charAt(0) || 'S'}
                 </span>
               </div>
               <Button variant="ghost" size="icon" onClick={handleLogout}>

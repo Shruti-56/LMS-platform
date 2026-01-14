@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockCourses, Course } from '@/data/mockData';
+import { useCourses, useEnrollments, useEnrollCourse, Course } from '@/hooks/useCourses';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
@@ -12,50 +12,56 @@ import {
   ShoppingCart,
   Check,
   Search,
-  Filter
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 
 const CourseMarketplace: React.FC = () => {
-  const { currentStudent, updateStudentData } = useAuth();
+  const { user } = useAuth();
+  const { data: courses = [], isLoading } = useCourses();
+  const { data: enrollments = [] } = useEnrollments();
+  const enrollCourse = useEnrollCourse();
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  // TODO: Fetch courses from API when backend is connected
-  const categories = ['all', ...new Set(mockCourses.map(c => c.category))];
+  const categories = ['all', ...new Set(courses.map(c => c.category))];
 
-  const filteredCourses = mockCourses.filter(course => {
+  const filteredCourses = courses.filter(course => {
     const matchesSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      course.description.toLowerCase().includes(searchQuery.toLowerCase());
+      (course.description || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || course.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
   const isPurchased = (courseId: string) => {
-    return currentStudent?.purchasedCourses.includes(courseId);
+    return enrollments.some(e => e.course_id === courseId);
   };
 
-  const handlePurchase = (course: Course) => {
-    if (!currentStudent) return;
+  const handlePurchase = async (course: Course) => {
+    if (!user) {
+      toast({
+        title: "Please sign in",
+        description: "You need to be signed in to purchase courses.",
+        variant: "destructive"
+      });
+      return;
+    }
 
-    // TODO: Integrate real payment gateway when backend is connected
-    // Simulated purchase - update local state
-    const updatedStudent = {
-      ...currentStudent,
-      purchasedCourses: [...currentStudent.purchasedCourses, course.id],
-      progress: {
-        ...currentStudent.progress,
-        [course.id]: { completedVideos: [] }
-      }
-    };
-
-    updateStudentData(updatedStudent);
-    
-    toast({
-      title: "Course Purchased! 🎉",
-      description: `You now have access to "${course.title}"`,
-    });
+    try {
+      await enrollCourse.mutateAsync(course.id);
+      toast({
+        title: "Course Purchased! 🎉",
+        description: `You now have access to "${course.title}"`,
+      });
+    } catch (error) {
+      toast({
+        title: "Purchase failed",
+        description: "There was an error purchasing the course. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const getLevelColor = (level: string) => {
@@ -66,6 +72,14 @@ const CourseMarketplace: React.FC = () => {
       default: return 'bg-muted text-muted-foreground';
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -148,32 +162,15 @@ const CourseMarketplace: React.FC = () => {
                     {course.duration}
                   </div>
                   <div className="flex items-center gap-2 text-muted-foreground">
-                    <Users className="w-4 h-4" />
-                    {course.studentsEnrolled.toLocaleString()}
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Star className="w-4 h-4 text-accent fill-accent" />
-                    {course.rating}
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
                     <BarChart className="w-4 h-4" />
                     {course.modules.length} Modules
                   </div>
                 </div>
 
-                <p className="text-sm text-muted-foreground mb-4">
-                  by <span className="text-foreground font-medium">{course.instructor}</span>
-                </p>
-
                 <div className="mt-auto pt-4 border-t border-border">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="text-2xl font-bold text-foreground">${course.price}</span>
-                      {course.originalPrice && (
-                        <span className="text-sm text-muted-foreground line-through ml-2">
-                          ${course.originalPrice}
-                        </span>
-                      )}
+                      <span className="text-2xl font-bold text-foreground">${Number(course.price).toFixed(2)}</span>
                     </div>
                     {purchased ? (
                       <Link to={`/student/course/${course.id}`}>
@@ -186,8 +183,13 @@ const CourseMarketplace: React.FC = () => {
                         variant="accent" 
                         onClick={() => handlePurchase(course)}
                         className="gap-2"
+                        disabled={enrollCourse.isPending}
                       >
-                        <ShoppingCart className="w-4 h-4" />
+                        {enrollCourse.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <ShoppingCart className="w-4 h-4" />
+                        )}
                         Buy Now
                       </Button>
                     )}

@@ -1,10 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockCourses, calculateCourseProgress, calculateModuleProgress } from '@/data/mockData';
+import { useCourse, useEnrollments, useVideoProgress, useToggleVideoComplete, calculateCourseProgress, calculateModuleProgress } from '@/hooks/useCourses';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import { 
   PlayCircle, 
@@ -14,40 +13,49 @@ import {
   ChevronRight,
   Clock,
   ArrowLeft,
-  Lock
+  Lock,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const CourseDetail: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
-  const { currentStudent, updateStudentData } = useAuth();
+  const { user } = useAuth();
+  const { data: course, isLoading: courseLoading } = useCourse(courseId);
+  const { data: enrollments = [] } = useEnrollments();
+  const { data: videoProgress = [] } = useVideoProgress();
+  const toggleComplete = useToggleVideoComplete();
+  
   const [expandedModules, setExpandedModules] = useState<string[]>([]);
   const [currentVideo, setCurrentVideo] = useState<{ moduleId: string; videoId: string } | null>(null);
 
-  // TODO: Fetch course details from API when backend is connected
-  const course = mockCourses.find(c => c.id === courseId);
-  const isPurchased = currentStudent?.purchasedCourses.includes(courseId || '');
+  const isPurchased = enrollments.some(e => e.course_id === courseId);
+  const completedVideoIds = videoProgress.filter(p => p.completed).map(p => p.video_id);
 
-  // Redirect if course not found
-  if (!course) {
-    return <Navigate to="/student/marketplace" />;
-  }
-
-  // Get progress data
-  const courseProgress = currentStudent?.progress[course.id];
-  const completedVideos = courseProgress?.completedVideos || [];
-  const progress = calculateCourseProgress(course, completedVideos);
-
-  // Initialize first video if none selected
-  useMemo(() => {
-    if (!currentVideo && course.modules.length > 0 && course.modules[0].videos.length > 0) {
+  // Initialize first video and expanded module when course loads
+  useEffect(() => {
+    if (course && course.modules.length > 0 && course.modules[0].videos.length > 0 && !currentVideo) {
       setCurrentVideo({
         moduleId: course.modules[0].id,
         videoId: course.modules[0].videos[0].id
       });
       setExpandedModules([course.modules[0].id]);
     }
-  }, [course]);
+  }, [course, currentVideo]);
+
+  if (courseLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!course) {
+    return <Navigate to="/student/marketplace" />;
+  }
+
+  const progress = calculateCourseProgress(course, completedVideoIds);
 
   const toggleModule = (moduleId: string) => {
     setExpandedModules(prev =>
@@ -57,7 +65,7 @@ const CourseDetail: React.FC = () => {
     );
   };
 
-  const isVideoCompleted = (videoId: string) => completedVideos.includes(videoId);
+  const isVideoCompleted = (videoId: string) => completedVideoIds.includes(videoId);
 
   const handleVideoClick = (moduleId: string, videoId: string) => {
     if (!isPurchased) {
@@ -71,40 +79,29 @@ const CourseDetail: React.FC = () => {
     setCurrentVideo({ moduleId, videoId });
   };
 
-  const handleMarkComplete = () => {
-    if (!currentVideo || !currentStudent || !courseId) return;
+  const handleMarkComplete = async () => {
+    if (!currentVideo || !user) return;
 
     const videoId = currentVideo.videoId;
-    
-    if (isVideoCompleted(videoId)) {
-      // Unmark as complete
-      const updatedCompletedVideos = completedVideos.filter(v => v !== videoId);
-      updateStudentData({
-        ...currentStudent,
-        progress: {
-          ...currentStudent.progress,
-          [courseId]: {
-            completedVideos: updatedCompletedVideos,
-            lastWatched: videoId
-          }
-        }
-      });
-    } else {
-      // Mark as complete
-      updateStudentData({
-        ...currentStudent,
-        progress: {
-          ...currentStudent.progress,
-          [courseId]: {
-            completedVideos: [...completedVideos, videoId],
-            lastWatched: videoId
-          }
-        }
+    const isCompleted = isVideoCompleted(videoId);
+
+    try {
+      await toggleComplete.mutateAsync({
+        videoId,
+        completed: !isCompleted
       });
 
+      if (!isCompleted) {
+        toast({
+          title: "Video Completed! 🎉",
+          description: "Great job! Keep up the momentum."
+        });
+      }
+    } catch (error) {
       toast({
-        title: "Video Completed! 🎉",
-        description: "Great job! Keep up the momentum."
+        title: "Error",
+        description: "Failed to update video progress.",
+        variant: "destructive"
       });
     }
   };
@@ -152,7 +149,6 @@ const CourseDetail: React.FC = () => {
                     {currentVideoData?.video?.title || 'Select a video'}
                   </p>
                   <p className="text-primary-foreground/60 text-sm mt-1">
-                    {/* TODO: Replace with actual video player (e.g., react-player) */}
                     Video player placeholder
                   </p>
                 </div>
@@ -180,8 +176,13 @@ const CourseDetail: React.FC = () => {
                   variant={isVideoCompleted(currentVideoData.video.id) ? "secondary" : "success"}
                   onClick={handleMarkComplete}
                   className="gap-2"
+                  disabled={toggleComplete.isPending}
                 >
-                  <CheckCircle className="w-4 h-4" />
+                  {toggleComplete.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CheckCircle className="w-4 h-4" />
+                  )}
                   {isVideoCompleted(currentVideoData.video.id) ? 'Completed' : 'Mark Complete'}
                 </Button>
               </div>
@@ -207,7 +208,7 @@ const CourseDetail: React.FC = () => {
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <div className="divide-y divide-border">
               {course.modules.map((module) => {
-                const moduleProgress = calculateModuleProgress(module, completedVideos);
+                const moduleProgress = calculateModuleProgress(module, completedVideoIds);
                 const isExpanded = expandedModules.includes(module.id);
 
                 return (
