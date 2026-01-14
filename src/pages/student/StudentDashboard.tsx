@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Link } from 'react-router-dom';
-import { useEnrolledCourses, useVideoProgress, calculateCourseProgress } from '@/hooks/useCourses';
+import { mockCourses, calculateCourseProgress } from '@/data/mockData';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { 
@@ -10,36 +10,37 @@ import {
   Trophy, 
   PlayCircle, 
   ArrowRight,
-  TrendingUp,
-  Loader2
+  TrendingUp
 } from 'lucide-react';
 
 const StudentDashboard: React.FC = () => {
-  const { profile } = useAuth();
-  const { data: enrolledCourses = [], isLoading: coursesLoading } = useEnrolledCourses();
-  const { data: videoProgress = [] } = useVideoProgress();
+  const { currentStudent } = useAuth();
 
-  const completedVideoIds = videoProgress.filter(p => p.completed).map(p => p.video_id);
-
-  const getOverallProgress = () => {
-    if (enrolledCourses.length === 0) return 0;
-    const totalProgress = enrolledCourses.reduce((acc, course) => {
-      return acc + calculateCourseProgress(course, completedVideoIds);
-    }, 0);
-    return Math.round(totalProgress / enrolledCourses.length);
-  };
-
-  const completedCourses = enrolledCourses.filter(course => 
-    calculateCourseProgress(course, completedVideoIds) === 100
+  // TODO: Fetch real data from API when backend is connected
+  const purchasedCourses = mockCourses.filter(
+    course => currentStudent?.purchasedCourses.includes(course.id)
   );
 
-  if (coursesLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const getOverallProgress = () => {
+    if (!currentStudent || purchasedCourses.length === 0) return 0;
+    const totalProgress = purchasedCourses.reduce((acc, course) => {
+      const courseProgress = currentStudent.progress[course.id];
+      if (courseProgress) {
+        return acc + calculateCourseProgress(course, courseProgress.completedVideos);
+      }
+      return acc;
+    }, 0);
+    return Math.round(totalProgress / purchasedCourses.length);
+  };
+
+  const lastWatchedCourse = purchasedCourses.find(course => {
+    const progress = currentStudent?.progress[course.id];
+    return progress?.lastWatched;
+  });
+
+  const lastWatchedVideo = lastWatchedCourse?.modules
+    .flatMap(m => m.videos)
+    .find(v => v.id === currentStudent?.progress[lastWatchedCourse.id]?.lastWatched);
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -48,14 +49,14 @@ const StudentDashboard: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div>
             <h1 className="text-3xl font-display font-bold mb-2">
-              Welcome back, {profile?.full_name?.split(' ')[0] || 'Student'}! 👋
+              Welcome back, {currentStudent?.name.split(' ')[0]}! 👋
             </h1>
             <p className="text-primary-foreground/80">
               Ready to continue your learning journey?
             </p>
           </div>
-          {enrolledCourses.length > 0 && (
-            <Link to={`/student/course/${enrolledCourses[0].id}`}>
+          {lastWatchedCourse && (
+            <Link to={`/student/course/${lastWatchedCourse.id}`}>
               <Button variant="accent" size="lg" className="gap-2">
                 <PlayCircle className="w-5 h-5" />
                 Continue Learning
@@ -74,7 +75,7 @@ const StudentDashboard: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Enrolled Courses</p>
-              <p className="text-2xl font-bold text-foreground">{enrolledCourses.length}</p>
+              <p className="text-2xl font-bold text-foreground">{purchasedCourses.length}</p>
             </div>
           </div>
         </div>
@@ -98,11 +99,43 @@ const StudentDashboard: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Certificates</p>
-              <p className="text-2xl font-bold text-foreground">{completedCourses.length}</p>
+              <p className="text-2xl font-bold text-foreground">
+                {purchasedCourses.filter(c => {
+                  const progress = currentStudent?.progress[c.id];
+                  return progress && calculateCourseProgress(c, progress.completedVideos) === 100;
+                }).length}
+              </p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Continue Learning */}
+      {lastWatchedCourse && lastWatchedVideo && (
+        <div className="bg-card rounded-xl border border-border shadow-card overflow-hidden">
+          <div className="p-6">
+            <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-primary" />
+              Continue Where You Left Off
+            </h2>
+            <div className="flex flex-col md:flex-row gap-6">
+              <div className="w-full md:w-64 aspect-video bg-muted rounded-lg flex items-center justify-center">
+                <PlayCircle className="w-12 h-12 text-muted-foreground" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm text-muted-foreground mb-1">{lastWatchedCourse.title}</p>
+                <h3 className="text-xl font-semibold text-foreground mb-2">{lastWatchedVideo.title}</h3>
+                <p className="text-sm text-muted-foreground mb-4">Duration: {lastWatchedVideo.duration}</p>
+                <Link to={`/student/course/${lastWatchedCourse.id}`}>
+                  <Button className="gap-2">
+                    Resume <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* My Courses */}
       <div>
@@ -113,7 +146,7 @@ const StudentDashboard: React.FC = () => {
           </Link>
         </div>
 
-        {enrolledCourses.length === 0 ? (
+        {purchasedCourses.length === 0 ? (
           <div className="bg-card rounded-xl border border-border p-12 text-center">
             <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-foreground mb-2">No courses yet</h3>
@@ -124,8 +157,11 @@ const StudentDashboard: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
-            {enrolledCourses.slice(0, 3).map((course) => {
-              const progress = calculateCourseProgress(course, completedVideoIds);
+            {purchasedCourses.slice(0, 3).map((course) => {
+              const courseProgress = currentStudent?.progress[course.id];
+              const progress = courseProgress 
+                ? calculateCourseProgress(course, courseProgress.completedVideos)
+                : 0;
 
               return (
                 <Link 

@@ -21,13 +21,13 @@ interface AdminLayoutProps {
 }
 
 const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
-  const { profile, signOut } = useAuth();
+  const { currentAdmin, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
-  const handleLogout = async () => {
-    await signOut();
+  const handleLogout = () => {
+    logout();
     navigate('/login');
   };
 
@@ -85,15 +85,15 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         <div className="flex items-center gap-3 p-3 rounded-xl bg-sidebar-accent">
           <div className="w-10 h-10 rounded-full bg-sidebar-primary flex items-center justify-center">
             <span className="text-sm font-medium text-sidebar-primary-foreground">
-              {profile?.full_name?.charAt(0) || 'A'}
+              {currentAdmin?.name.charAt(0) || 'A'}
             </span>
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-sidebar-foreground truncate">
-              {profile?.full_name || 'Admin User'}
+              {currentAdmin?.name || 'Admin User'}
             </p>
             <p className="text-xs text-sidebar-foreground/60 truncate">
-              {profile?.email || 'admin@learnhub.com'}
+              {currentAdmin?.email || 'admin@learnhub.com'}
             </p>
           </div>
           <Button 

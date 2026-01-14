@@ -1,7 +1,8 @@
 import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useEnrolledCourses, useVideoProgress, calculateCourseProgress } from '@/hooks/useCourses';
+import { mockCourses, calculateCourseProgress } from '@/data/mockData';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { 
   User, 
   Mail, 
@@ -10,28 +11,21 @@ import {
   Trophy,
   Award,
   Edit2,
-  Download,
-  Loader2
+  Download
 } from 'lucide-react';
 
 const StudentProfile: React.FC = () => {
-  const { profile } = useAuth();
-  const { data: enrolledCourses = [], isLoading } = useEnrolledCourses();
-  const { data: videoProgress = [] } = useVideoProgress();
+  const { currentStudent } = useAuth();
 
-  const completedVideoIds = videoProgress.filter(p => p.completed).map(p => p.video_id);
-
-  const completedCourses = enrolledCourses.filter(course => 
-    calculateCourseProgress(course, completedVideoIds) === 100
+  // TODO: Fetch student profile from API when backend is connected
+  const purchasedCourses = mockCourses.filter(
+    course => currentStudent?.purchasedCourses.includes(course.id)
   );
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const completedCourses = purchasedCourses.filter(course => {
+    const progress = currentStudent?.progress[course.id];
+    return progress && calculateCourseProgress(course, progress.completedVideos) === 100;
+  });
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
@@ -42,12 +36,12 @@ const StudentProfile: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-end gap-4 -mt-12">
             <div className="w-24 h-24 rounded-xl bg-card border-4 border-card flex items-center justify-center shadow-lg">
               <span className="text-3xl font-bold text-primary">
-                {profile?.full_name?.charAt(0) || 'S'}
+                {currentStudent?.name.charAt(0) || 'S'}
               </span>
             </div>
             <div className="flex-1">
               <h1 className="text-2xl font-display font-bold text-foreground">
-                {profile?.full_name || 'Student Name'}
+                {currentStudent?.name || 'Student Name'}
               </h1>
               <p className="text-muted-foreground">Data Enthusiast</p>
             </div>
@@ -68,7 +62,7 @@ const StudentProfile: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Enrolled</p>
-              <p className="text-2xl font-bold text-foreground">{enrolledCourses.length}</p>
+              <p className="text-2xl font-bold text-foreground">{purchasedCourses.length}</p>
             </div>
           </div>
         </div>
@@ -106,14 +100,14 @@ const StudentProfile: React.FC = () => {
             <User className="w-5 h-5 text-muted-foreground" />
             <div>
               <p className="text-xs text-muted-foreground">Full Name</p>
-              <p className="text-sm font-medium text-foreground">{profile?.full_name || 'Not set'}</p>
+              <p className="text-sm font-medium text-foreground">{currentStudent?.name}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
             <Mail className="w-5 h-5 text-muted-foreground" />
             <div>
               <p className="text-xs text-muted-foreground">Email</p>
-              <p className="text-sm font-medium text-foreground">{profile?.email}</p>
+              <p className="text-sm font-medium text-foreground">{currentStudent?.email}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
@@ -121,8 +115,8 @@ const StudentProfile: React.FC = () => {
             <div>
               <p className="text-xs text-muted-foreground">Joined</p>
               <p className="text-sm font-medium text-foreground">
-                {profile?.created_at 
-                  ? new Date(profile.created_at).toLocaleDateString('en-US', { 
+                {currentStudent?.joinedDate 
+                  ? new Date(currentStudent.joinedDate).toLocaleDateString('en-US', { 
                       month: 'long', 
                       year: 'numeric' 
                     })

@@ -1,107 +1,23 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { toast } from '@/hooks/use-toast';
-import { GraduationCap, BookOpen, Users, TrendingUp, Award, Loader2 } from 'lucide-react';
-import { z } from 'zod';
-
-const authSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  fullName: z.string().min(2, 'Name must be at least 2 characters').optional(),
-});
+import { GraduationCap, Shield, BookOpen, Users, TrendingUp, Award } from 'lucide-react';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { signIn, signUp } = useAuth();
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    fullName: '',
-  });
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const { loginAsStudent, loginAsAdmin } = useAuth();
 
-  const validateForm = () => {
-    try {
-      if (isSignUp) {
-        authSchema.parse({
-          email: formData.email,
-          password: formData.password,
-          fullName: formData.fullName,
-        });
-      } else {
-        authSchema.omit({ fullName: true }).parse({
-          email: formData.email,
-          password: formData.password,
-        });
-      }
-      setErrors({});
-      return true;
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const newErrors: Record<string, string> = {};
-        error.errors.forEach((err) => {
-          if (err.path[0]) {
-            newErrors[err.path[0] as string] = err.message;
-          }
-        });
-        setErrors(newErrors);
-      }
-      return false;
-    }
+  const handleStudentLogin = () => {
+    // TODO: Replace with real authentication API call
+    loginAsStudent();
+    navigate('/student/dashboard');
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateForm()) return;
-
-    setIsLoading(true);
-
-    try {
-      if (isSignUp) {
-        const { error } = await signUp(formData.email, formData.password, formData.fullName);
-        if (error) {
-          toast({
-            title: 'Sign up failed',
-            description: error.message || 'An error occurred during sign up',
-            variant: 'destructive',
-          });
-          return;
-        }
-        toast({
-          title: 'Account created! 🎉',
-          description: 'Welcome to LearnHub! You can now access your dashboard.',
-        });
-      } else {
-        const { error } = await signIn(formData.email, formData.password);
-        if (error) {
-          toast({
-            title: 'Sign in failed',
-            description: error.message || 'Invalid email or password',
-            variant: 'destructive',
-          });
-          return;
-        }
-        toast({
-          title: 'Welcome back! 👋',
-          description: 'Successfully signed in to LearnHub.',
-        });
-      }
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'An unexpected error occurred. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
+  const handleAdminLogin = () => {
+    // TODO: Replace with real authentication API call
+    loginAsAdmin();
+    navigate('/admin/dashboard');
   };
 
   return (
@@ -158,7 +74,7 @@ const LoginPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Right Panel - Login Form */}
+      {/* Right Panel - Login Options */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-background">
         <div className="w-full max-w-md space-y-8">
           {/* Mobile Logo */}
@@ -170,94 +86,52 @@ const LoginPage: React.FC = () => {
           </div>
 
           <div className="text-center space-y-2">
-            <h2 className="text-3xl font-display font-bold text-foreground">
-              {isSignUp ? 'Create Account' : 'Welcome Back'}
-            </h2>
-            <p className="text-muted-foreground">
-              {isSignUp 
-                ? 'Start your learning journey today' 
-                : 'Sign in to continue your learning journey'}
-            </p>
+            <h2 className="text-3xl font-display font-bold text-foreground">Welcome Back</h2>
+            <p className="text-muted-foreground">Choose how you'd like to access the platform</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {isSignUp && (
-              <div className="space-y-2">
-                <Label htmlFor="fullName">Full Name</Label>
-                <Input
-                  id="fullName"
-                  type="text"
-                  placeholder="John Doe"
-                  value={formData.fullName}
-                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                  className={errors.fullName ? 'border-destructive' : ''}
-                />
-                {errors.fullName && (
-                  <p className="text-sm text-destructive">{errors.fullName}</p>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className={errors.email ? 'border-destructive' : ''}
-              />
-              {errors.email && (
-                <p className="text-sm text-destructive">{errors.email}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className={errors.password ? 'border-destructive' : ''}
-              />
-              {errors.password && (
-                <p className="text-sm text-destructive">{errors.password}</p>
-              )}
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full"
-              size="lg"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {isSignUp ? 'Creating account...' : 'Signing in...'}
-                </>
-              ) : (
-                isSignUp ? 'Create Account' : 'Sign In'
-              )}
-            </Button>
-          </form>
-
-          <div className="text-center">
+          <div className="space-y-4">
+            {/* Student Login */}
             <button
-              type="button"
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setErrors({});
-              }}
-              className="text-sm text-primary hover:underline"
+              onClick={handleStudentLogin}
+              className="w-full p-6 rounded-xl border-2 border-border bg-card hover:border-primary hover:shadow-card-hover transition-all duration-300 group"
             >
-              {isSignUp 
-                ? 'Already have an account? Sign in' 
-                : "Don't have an account? Sign up"}
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center group-hover:gradient-primary transition-all duration-300">
+                  <GraduationCap className="w-7 h-7 text-primary group-hover:text-primary-foreground transition-colors" />
+                </div>
+                <div className="text-left flex-1">
+                  <h3 className="text-lg font-semibold text-foreground mb-1">Student Login</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Access your courses, track progress, and continue learning
+                  </p>
+                </div>
+              </div>
             </button>
+
+            {/* Admin Login */}
+            <button
+              onClick={handleAdminLogin}
+              className="w-full p-6 rounded-xl border-2 border-border bg-card hover:border-accent hover:shadow-card-hover transition-all duration-300 group"
+            >
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center group-hover:gradient-accent transition-all duration-300">
+                  <Shield className="w-7 h-7 text-primary group-hover:text-accent-foreground transition-colors" />
+                </div>
+                <div className="text-left flex-1">
+                  <h3 className="text-lg font-semibold text-foreground mb-1">Admin Login</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Manage courses, students, and platform settings
+                  </p>
+                </div>
+              </div>
+            </button>
+          </div>
+
+          <div className="pt-4">
+            <p className="text-center text-sm text-muted-foreground">
+              <span className="text-destructive font-medium">Demo Mode:</span> No password required. Click to simulate login.
+            </p>
           </div>
         </div>
       </div>

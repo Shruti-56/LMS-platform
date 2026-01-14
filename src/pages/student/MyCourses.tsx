@@ -1,6 +1,7 @@
 import React from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Link } from 'react-router-dom';
-import { useEnrolledCourses, useVideoProgress, calculateCourseProgress } from '@/hooks/useCourses';
+import { mockCourses, calculateCourseProgress } from '@/data/mockData';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,33 +11,25 @@ import {
   PlayCircle, 
   ArrowRight,
   Trophy,
-  CheckCircle,
-  Loader2
+  CheckCircle
 } from 'lucide-react';
 
 const MyCourses: React.FC = () => {
-  const { data: enrolledCourses = [], isLoading } = useEnrolledCourses();
-  const { data: videoProgress = [] } = useVideoProgress();
+  const { currentStudent } = useAuth();
 
-  const completedVideoIds = videoProgress.filter(p => p.completed).map(p => p.video_id);
+  // TODO: Fetch purchased courses from API when backend is connected
+  const purchasedCourses = mockCourses.filter(
+    course => currentStudent?.purchasedCourses.includes(course.id)
+  );
 
-  const getCompletedVideosCount = (course: typeof enrolledCourses[0]) => {
-    return course.modules.reduce((acc, module) => {
-      return acc + module.videos.filter(v => completedVideoIds.includes(v.id)).length;
-    }, 0);
+  const getCompletedVideosCount = (courseId: string) => {
+    return currentStudent?.progress[courseId]?.completedVideos.length || 0;
   };
 
-  const getTotalVideosCount = (course: typeof enrolledCourses[0]) => {
-    return course.modules.reduce((acc, m) => acc + m.videos.length, 0);
+  const getTotalVideosCount = (courseId: string) => {
+    const course = mockCourses.find(c => c.id === courseId);
+    return course?.modules.reduce((acc, m) => acc + m.videos.length, 0) || 0;
   };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -46,7 +39,7 @@ const MyCourses: React.FC = () => {
         <p className="text-muted-foreground">Track your progress and continue where you left off</p>
       </div>
 
-      {enrolledCourses.length === 0 ? (
+      {purchasedCourses.length === 0 ? (
         <div className="bg-card rounded-xl border border-border p-12 text-center">
           <BookOpen className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-foreground mb-2">No courses yet</h3>
@@ -59,10 +52,13 @@ const MyCourses: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-4">
-          {enrolledCourses.map((course) => {
-            const progress = calculateCourseProgress(course, completedVideoIds);
-            const completedVideos = getCompletedVideosCount(course);
-            const totalVideos = getTotalVideosCount(course);
+          {purchasedCourses.map((course) => {
+            const courseProgress = currentStudent?.progress[course.id];
+            const progress = courseProgress 
+              ? calculateCourseProgress(course, courseProgress.completedVideos)
+              : 0;
+            const completedVideos = getCompletedVideosCount(course.id);
+            const totalVideos = getTotalVideosCount(course.id);
             const isCompleted = progress === 100;
 
             return (
@@ -92,6 +88,9 @@ const MyCourses: React.FC = () => {
                       <div className="flex-1">
                         <p className="text-sm text-primary font-medium mb-1">{course.category}</p>
                         <h3 className="text-xl font-semibold text-foreground mb-2">{course.title}</h3>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          by {course.instructor}
+                        </p>
 
                         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-4">
                           <div className="flex items-center gap-1.5">
