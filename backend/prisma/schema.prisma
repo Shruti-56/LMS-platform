@@ -1,0 +1,190 @@
+// Prisma Schema for LearnHub E-Learning Platform
+// Database: MySQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  STUDENT
+  ADMIN
+}
+
+enum CourseLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum CourseCategory {
+  DATA_ANALYTICS
+  DATA_ENGINEERING
+  DATA_SCIENCE
+}
+
+enum PurchaseStatus {
+  PENDING
+  COMPLETED
+  REFUNDED
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  profile       Profile?
+  roles         UserRole[]     @default([STUDENT])
+  enrollments   Enrollment[]
+  purchases     Purchase[]
+  videoProgress VideoProgress[]
+  certificates  Certificate[]
+  coursesCreated Course[]       @relation("CourseCreator")
+
+  @@map("users")
+}
+
+model Profile {
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  fullName  String   @map("full_name")
+  avatarUrl String?  @map("avatar_url")
+  bio       String?  @db.Text
+  isBlocked Boolean  @default(false) @map("is_blocked")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model Course {
+  id            String         @id @default(uuid())
+  title         String
+  description   String?        @db.Text
+  category      CourseCategory
+  level         CourseLevel    @default(BEGINNER)
+  price         Decimal        @default(0) @db.Decimal(10, 2)
+  thumbnailUrl  String?        @map("thumbnail_url")
+  isVisible     Boolean        @default(true) @map("is_visible")
+  durationHours Int            @default(0) @map("duration_hours")
+  createdById   String?        @map("created_by")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  createdBy    User?         @relation("CourseCreator", fields: [createdById], references: [id])
+  modules      Module[]
+  enrollments  Enrollment[]
+  purchases    Purchase[]
+  certificates Certificate[]
+
+  @@map("courses")
+}
+
+model Module {
+  id          String   @id @default(uuid())
+  courseId    String   @map("course_id")
+  title       String
+  description String?  @db.Text
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  course Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  videos Video[]
+
+  @@map("modules")
+}
+
+model Video {
+  id              String   @id @default(uuid())
+  moduleId        String   @map("module_id")
+  title           String
+  description     String?  @db.Text
+  videoUrl        String?  @map("video_url")
+  durationMinutes Int      @default(0) @map("duration_minutes")
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  module   Module          @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  progress VideoProgress[]
+
+  @@map("videos")
+}
+
+model Enrollment {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  courseId    String    @map("course_id")
+  enrolledAt  DateTime  @default(now()) @map("enrolled_at")
+  completedAt DateTime? @map("completed_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@map("enrollments")
+}
+
+model Purchase {
+  id              String         @id @default(uuid())
+  userId          String         @map("user_id")
+  courseId        String         @map("course_id")
+  amount          Decimal        @db.Decimal(10, 2)
+  status          PurchaseStatus @default(PENDING)
+  paymentProvider String?        @map("payment_provider")
+  paymentId       String?        @map("payment_id")
+  purchasedAt     DateTime       @default(now()) @map("purchased_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("purchases")
+}
+
+model VideoProgress {
+  id               String    @id @default(uuid())
+  userId           String    @map("user_id")
+  videoId          String    @map("video_id")
+  isCompleted      Boolean   @default(false) @map("is_completed")
+  watchTimeSeconds Int       @default(0) @map("watch_time_seconds")
+  lastWatchedAt    DateTime  @default(now()) @map("last_watched_at")
+  completedAt      DateTime? @map("completed_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, videoId])
+  @@map("video_progress")
+}
+
+model Certificate {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  courseId       String   @map("course_id")
+  certificateUrl String?  @map("certificate_url")
+  issuedAt       DateTime @default(now()) @map("issued_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@map("certificates")
+}
