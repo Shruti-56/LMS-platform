@@ -1,67 +1,103 @@
-import React from 'react';
-import { mockCourses, mockStudents, calculateCourseProgress } from '@/data/mockData';
+import React, { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
 import { Progress } from '@/components/ui/progress';
+import { toast } from '@/hooks/use-toast';
 import { 
   BarChart3, 
   TrendingUp, 
   Users,
   BookOpen,
-  Clock
 } from 'lucide-react';
 
+type CoursePopularity = {
+  id: string;
+  title: string;
+  enrollments: number;
+};
+
+type Analytics = {
+  enrollmentsByMonth: Array<{ month: string; count: number }>;
+  revenueByMonth: Array<{ month: string; revenue: number }>;
+  coursePopularity: CoursePopularity[];
+};
+
+type DashboardStats = {
+  totalStudents: number;
+  totalCourses: number;
+  totalEnrollments: number;
+  completionRate: number;
+};
+
 const AdminAnalytics: React.FC = () => {
-  // TODO: Fetch analytics from API when backend is connected
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Calculate course-wise analytics
-  const courseAnalytics = mockCourses.map(course => {
-    const enrolledStudents = mockStudents.filter(s => 
-      s.purchasedCourses.includes(course.id)
-    );
-    
-    const totalProgress = enrolledStudents.reduce((acc, student) => {
-      const progress = student.progress[course.id];
-      if (progress) {
-        return acc + calculateCourseProgress(course, progress.completedVideos);
+  const fetchData = async () => {
+    try {
+      setError(null);
+      setLoading(true);
+      
+      const [analyticsRes, statsRes] = await Promise.all([
+        api.get('/admin/analytics'),
+        api.get('/admin/dashboard'),
+      ]);
+
+      if (analyticsRes.ok) {
+        const analyticsData = await analyticsRes.json();
+        setAnalytics(analyticsData);
+      } else {
+        console.error('Analytics API error:', analyticsRes.status);
       }
-      return acc;
-    }, 0);
 
-    const avgProgress = enrolledStudents.length > 0 
-      ? Math.round(totalProgress / enrolledStudents.length) 
-      : 0;
-
-    // Calculate module-level stats
-    const moduleStats = course.modules.map(module => {
-      let completedCount = 0;
-      enrolledStudents.forEach(student => {
-        const progress = student.progress[course.id];
-        if (progress) {
-          module.videos.forEach(video => {
-            if (progress.completedVideos.includes(video.id)) {
-              completedCount++;
-            }
-          });
-        }
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        setStats(statsData);
+      } else {
+        console.error('Stats API error:', statsRes.status);
+      }
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+      setError('Failed to load analytics. Please check if the server is running.');
+      toast({
+        title: 'Error',
+        description: 'Failed to load analytics',
+        variant: 'destructive',
       });
-      
-      const totalPossible = module.videos.length * enrolledStudents.length;
-      const percentage = totalPossible > 0 
-        ? Math.round((completedCount / totalPossible) * 100)
-        : 0;
-      
-      return {
-        ...module,
-        completionRate: percentage
-      };
-    });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return {
-      ...course,
-      enrolledCount: enrolledStudents.length,
-      avgProgress,
-      moduleStats
-    };
-  });
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <div className="text-center py-12 text-muted-foreground">Loading analytics...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-6 text-center">
+          <p className="text-destructive font-medium mb-2">Error Loading Analytics</p>
+          <p className="text-sm text-muted-foreground mb-4">{error}</p>
+          <button 
+            onClick={fetchData}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -80,7 +116,7 @@ const AdminAnalytics: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total Students</p>
-              <p className="text-2xl font-bold text-foreground">{mockStudents.length}</p>
+              <p className="text-2xl font-bold text-foreground">{stats?.totalStudents || 0}</p>
             </div>
           </div>
         </div>
@@ -92,7 +128,7 @@ const AdminAnalytics: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Active Courses</p>
-              <p className="text-2xl font-bold text-foreground">{mockCourses.length}</p>
+              <p className="text-2xl font-bold text-foreground">{stats?.totalCourses || 0}</p>
             </div>
           </div>
         </div>
@@ -104,82 +140,135 @@ const AdminAnalytics: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Avg. Completion</p>
-              <p className="text-2xl font-bold text-foreground">
-                {Math.round(
-                  courseAnalytics.reduce((acc, c) => acc + c.avgProgress, 0) / courseAnalytics.length
-                )}%
-              </p>
+              <p className="text-2xl font-bold text-foreground">{stats?.completionRate || 0}%</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Course-wise Analytics */}
-      <div className="space-y-6">
-        <h2 className="text-xl font-semibold text-foreground">Course Performance</h2>
-        
-        {courseAnalytics.map((course) => (
-          <div key={course.id} className="bg-card rounded-xl border border-border shadow-card overflow-hidden">
-            {/* Course Header */}
-            <div className="p-6 border-b border-border">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-foreground">{course.title}</h3>
-                  <p className="text-sm text-muted-foreground">{course.category}</p>
-                </div>
-                <div className="flex items-center gap-6">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-foreground">{course.enrolledCount}</p>
-                    <p className="text-xs text-muted-foreground">Enrolled</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-foreground">{course.avgProgress}%</p>
-                    <p className="text-xs text-muted-foreground">Avg. Progress</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Module Progress */}
-            <div className="p-6">
-              <h4 className="text-sm font-medium text-muted-foreground mb-4">Module Completion Rates</h4>
-              <div className="space-y-4">
-                {course.moduleStats.map((module) => (
-                  <div key={module.id}>
+      {/* Course Popularity */}
+      <div className="bg-card rounded-xl border border-border shadow-card overflow-hidden">
+        <div className="p-6 border-b border-border">
+          <h2 className="text-lg font-semibold text-foreground">Course Popularity</h2>
+          <p className="text-sm text-muted-foreground">Courses ranked by enrollment count</p>
+        </div>
+        <div className="p-6">
+          {analytics?.coursePopularity && analytics.coursePopularity.length > 0 ? (
+            <div className="space-y-4">
+              {analytics.coursePopularity.map((course, index) => {
+                const maxEnrollments = Math.max(...analytics.coursePopularity.map(c => c.enrollments));
+                const percentage = maxEnrollments > 0 ? (course.enrollments / maxEnrollments) * 100 : 0;
+                
+                return (
+                  <div key={course.id}>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-foreground">{module.title}</span>
-                      <span className="text-sm font-medium text-foreground">{module.completionRate}%</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-muted-foreground w-6">#{index + 1}</span>
+                        <span className="text-sm text-foreground">{course.title}</span>
+                      </div>
+                      <span className="text-sm font-medium text-foreground">{course.enrollments} students</span>
                     </div>
                     <Progress 
-                      value={module.completionRate} 
+                      value={percentage} 
                       className="h-2"
                       indicatorClassName={
-                        module.completionRate > 70 
+                        index === 0 
                           ? 'bg-success' 
-                          : module.completionRate > 40 
-                          ? 'bg-warning' 
-                          : 'bg-destructive'
+                          : index < 3 
+                          ? 'bg-primary' 
+                          : 'bg-muted-foreground'
                       }
                     />
                   </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              No course data available yet
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Enrollment Trends */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Enrollments by Month */}
+        <div className="bg-card rounded-xl border border-border shadow-card overflow-hidden">
+          <div className="p-6 border-b border-border">
+            <h2 className="text-lg font-semibold text-foreground">Monthly Enrollments</h2>
+            <p className="text-sm text-muted-foreground">New enrollments over time</p>
+          </div>
+          <div className="p-6">
+            {analytics?.enrollmentsByMonth && analytics.enrollmentsByMonth.length > 0 ? (
+              <div className="space-y-3">
+                {analytics.enrollmentsByMonth.slice(0, 6).map((item: { month: string; count: number | bigint }) => (
+                  <div key={item.month} className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">{item.month}</span>
+                    <span className="text-sm font-medium text-foreground">{Number(item.count)} enrollments</span>
+                  </div>
                 ))}
               </div>
-            </div>
-
-            {/* Engagement Chart Placeholder */}
-            <div className="px-6 pb-6">
+            ) : (
               <div className="h-40 bg-muted/50 rounded-lg flex items-center justify-center">
                 <div className="text-center">
                   <BarChart3 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    {/* TODO: Add engagement chart with recharts */}
-                    Engagement chart placeholder
-                  </p>
+                  <p className="text-sm text-muted-foreground">No enrollment data yet</p>
                 </div>
               </div>
-            </div>
+            )}
           </div>
-        ))}
+        </div>
+
+        {/* Revenue by Month */}
+        <div className="bg-card rounded-xl border border-border shadow-card overflow-hidden">
+          <div className="p-6 border-b border-border">
+            <h2 className="text-lg font-semibold text-foreground">Monthly Revenue</h2>
+            <p className="text-sm text-muted-foreground">Revenue trends over time</p>
+          </div>
+          <div className="p-6">
+            {analytics?.revenueByMonth && analytics.revenueByMonth.length > 0 ? (
+              <div className="space-y-3">
+                {analytics.revenueByMonth.slice(0, 6).map((item: { month: string; revenue: number | null }) => (
+                  <div key={item.month} className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">{item.month}</span>
+                    <span className="text-sm font-medium text-foreground">₹{Number(item.revenue).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="h-40 bg-muted/50 rounded-lg flex items-center justify-center">
+                <div className="text-center">
+                  <BarChart3 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">No revenue data yet</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Summary Stats */}
+      <div className="bg-card rounded-xl border border-border p-6 shadow-card">
+        <h2 className="text-lg font-semibold text-foreground mb-4">Platform Summary</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="text-center p-4 bg-muted/50 rounded-lg">
+            <p className="text-3xl font-bold text-foreground">{stats?.totalStudents || 0}</p>
+            <p className="text-sm text-muted-foreground">Total Students</p>
+          </div>
+          <div className="text-center p-4 bg-muted/50 rounded-lg">
+            <p className="text-3xl font-bold text-foreground">{stats?.totalCourses || 0}</p>
+            <p className="text-sm text-muted-foreground">Total Courses</p>
+          </div>
+          <div className="text-center p-4 bg-muted/50 rounded-lg">
+            <p className="text-3xl font-bold text-foreground">{stats?.totalEnrollments || 0}</p>
+            <p className="text-sm text-muted-foreground">Total Enrollments</p>
+          </div>
+          <div className="text-center p-4 bg-muted/50 rounded-lg">
+            <p className="text-3xl font-bold text-foreground">{stats?.completionRate || 0}%</p>
+            <p className="text-sm text-muted-foreground">Completion Rate</p>
+          </div>
+        </div>
       </div>
     </div>
   );

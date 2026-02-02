@@ -10,7 +10,15 @@ import {
   Settings,
   LogOut,
   ChevronRight,
-  Menu
+  Menu,
+  Clock,
+  UserCheck,
+  Video,
+  Shield,
+  Calendar,
+  Radio,
+  Megaphone,
+  ImagePlus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -21,20 +29,28 @@ interface AdminLayoutProps {
 }
 
 const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
-  const { currentAdmin, logout } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const handleLogout = async () => {
+    await logout();
+    // Use replace to prevent back navigation
+    navigate('/login', { replace: true });
   };
 
   const navItems = [
     { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/admin/courses', label: 'Courses', icon: BookOpen },
     { path: '/admin/students', label: 'Students', icon: Users },
+    { path: '/admin/notices', label: 'Notices', icon: Megaphone },
+    { path: '/admin/banners', label: 'Banners', icon: ImagePlus },
+    { path: '/admin/instructors', label: 'Instructors', icon: UserCheck },
+    { path: '/admin/interviews', label: 'Interviews', icon: Calendar },
+    { path: '/admin/live-lectures', label: 'Live Lectures', icon: Radio },
+    { path: '/admin/alumni', label: 'Alumni', icon: Video },
+    { path: '/admin/screentime', label: 'Screen Time', icon: Clock },
     { path: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
     { path: '/admin/profile', label: 'Settings', icon: Settings },
   ];
@@ -50,28 +66,34 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             <GraduationCap className="w-6 h-6 text-foreground" />
           </div>
           <div>
-            <span className="text-lg font-display font-bold text-sidebar-foreground">LearnHub</span>
+            <span className="text-lg font-display font-bold text-sidebar-foreground">DataUniverse</span>
             <p className="text-xs text-sidebar-foreground/60">Admin Panel</p>
           </div>
         </Link>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {navItems.map((item) => (
           <Link
             key={item.path}
             to={item.path}
             onClick={() => setMobileOpen(false)}
             className={cn(
-              "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all group",
+              "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all group relative",
               isActive(item.path)
-                ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+                ? "bg-gradient-to-r from-sidebar-primary to-sidebar-primary/90 text-sidebar-primary-foreground shadow-md"
+                : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
             )}
           >
-            <item.icon className="w-5 h-5" />
-            {item.label}
+            <item.icon className={cn(
+              "w-5 h-5 transition-transform",
+              isActive(item.path) && "scale-110"
+            )} />
+            <span className="flex-1">{item.label}</span>
+            {isActive(item.path) && (
+              <div className="absolute right-2 w-1.5 h-1.5 rounded-full bg-sidebar-primary-foreground" />
+            )}
             <ChevronRight className={cn(
               "w-4 h-4 ml-auto opacity-0 group-hover:opacity-100 transition-opacity",
               isActive(item.path) && "opacity-100"
@@ -82,29 +104,39 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
 
       {/* User Section */}
       <div className="p-4 border-t border-sidebar-border">
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-sidebar-accent">
-          <div className="w-10 h-10 rounded-full bg-sidebar-primary flex items-center justify-center">
-            <span className="text-sm font-medium text-sidebar-primary-foreground">
-              {currentAdmin?.name.charAt(0) || 'A'}
-            </span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-sidebar-foreground truncate">
-              {currentAdmin?.name || 'Admin User'}
-            </p>
-            <p className="text-xs text-sidebar-foreground/60 truncate">
-              {currentAdmin?.email || 'admin@learnhub.com'}
-            </p>
-          </div>
+        <div className="flex items-center gap-2 mb-2">
+          <Link
+            to="/admin/policies"
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
+          >
+            <Shield className="w-4 h-4" />
+            <span>Policies</span>
+          </Link>
           <Button 
             variant="ghost" 
             size="icon" 
             onClick={handleLogout}
-            className="text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+            className="text-sidebar-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
+            title="Logout"
           >
             <LogOut className="w-4 h-4" />
           </Button>
         </div>
+        <Link
+          to="/admin/profile"
+          className="flex items-center gap-3 p-3 rounded-xl bg-sidebar-accent hover:bg-sidebar-accent/80 transition-colors"
+        >
+          <div className="w-9 h-9 rounded-full bg-sidebar-primary flex items-center justify-center">
+            <span className="text-sm font-semibold text-sidebar-primary-foreground">
+              {user?.fullName?.charAt(0) || user?.email?.charAt(0).toUpperCase() || 'A'}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-sidebar-foreground/60 truncate">
+              {user?.email || 'admin@datauniverse.com'}
+            </p>
+          </div>
+        </Link>
       </div>
     </div>
   );
@@ -132,14 +164,16 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           <div className="w-8 h-8 gradient-accent rounded-lg flex items-center justify-center">
             <GraduationCap className="w-4 h-4 text-foreground" />
           </div>
-          <span className="text-lg font-display font-bold text-sidebar-foreground">LearnHub</span>
+          <span className="text-lg font-display font-bold text-sidebar-foreground">DataUniverse</span>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 lg:ml-64 pt-16 lg:pt-0">
-        <div className="p-6 lg:p-8">
-          {children}
+      <main className="flex-1 lg:ml-64 pt-16 lg:pt-0 bg-gradient-to-br from-background via-background to-muted/20">
+        <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
+          <div className="animate-fade-in">
+            {children}
+          </div>
         </div>
       </main>
     </div>

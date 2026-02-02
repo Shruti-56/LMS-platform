@@ -49,7 +49,8 @@ export class UserController {
       res.json({
         id: user.id,
         email: user.email,
-        roles: user.roles,
+        role: user.role,
+        roles: [user.role], // Keep roles array for backward compatibility
         createdAt: user.createdAt,
         profile: user.profile,
         enrolledCourses: user.enrollments.map(e => e.course),
@@ -142,17 +143,12 @@ export class UserController {
         include: {
           course: {
             include: {
-              modules: {
-                include: {
-                  videos: { select: { id: true } },
-                },
-              },
+              videos: { select: { id: true } },
             },
           },
         },
       });
 
-      // Get all completed videos
       const completedVideos = await prisma.videoProgress.findMany({
         where: {
           userId,
@@ -161,7 +157,7 @@ export class UserController {
         include: {
           video: {
             include: {
-              module: true,
+              course: { select: { id: true, title: true } },
             },
           },
         },
@@ -169,31 +165,25 @@ export class UserController {
         take: 5,
       });
 
-      // Calculate stats
       const completedVideoIds = new Set(completedVideos.map(v => v.videoId));
       let totalVideos = 0;
       let totalCompleted = 0;
 
       enrollments.forEach(enrollment => {
-        enrollment.course.modules.forEach(module => {
-          totalVideos += module.videos.length;
-          module.videos.forEach(video => {
-            if (completedVideoIds.has(video.id)) {
-              totalCompleted++;
-            }
-          });
+        enrollment.course.videos.forEach(video => {
+          totalVideos++;
+          if (completedVideoIds.has(video.id)) {
+            totalCompleted++;
+          }
         });
       });
 
-      // Get recently watched
       const recentProgress = await prisma.videoProgress.findFirst({
         where: { userId },
         include: {
           video: {
             include: {
-              module: {
-                include: { course: true },
-              },
+              course: { select: { id: true, title: true } },
             },
           },
         },
@@ -210,12 +200,12 @@ export class UserController {
           : 0,
         recentlyWatched: recentProgress ? {
           video: recentProgress.video,
-          course: recentProgress.video.module.course,
+          course: recentProgress.video.course,
           watchedAt: recentProgress.lastWatchedAt,
         } : null,
         recentCompletions: completedVideos.slice(0, 5).map(v => ({
           videoTitle: v.video.title,
-          moduleTitle: v.video.module.title,
+          moduleTitle: v.video.course?.title ?? 'Content',
           completedAt: v.completedAt,
         })),
       });

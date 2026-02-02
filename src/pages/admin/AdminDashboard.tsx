@@ -1,61 +1,112 @@
-import React from 'react';
-import { platformStats, mockStudents, mockCourses } from '@/data/mockData';
+import React, { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
+import { toast } from '@/hooks/use-toast';
 import { 
   Users, 
   BookOpen, 
   ShoppingCart, 
   TrendingUp,
-  DollarSign,
   Activity,
   ArrowUp,
   ArrowDown
 } from 'lucide-react';
 
-const AdminDashboard: React.FC = () => {
-  // TODO: Fetch real statistics from API when backend is connected
+type DashboardStats = {
+  totalStudents: number;
+  totalCourses: number;
+  totalEnrollments: number;
+  totalRevenue: number;
+  completionRate: number;
+  recentEnrollments: Array<{
+    studentName: string;
+    courseTitle: string;
+    enrolledAt: string;
+  }>;
+};
 
-  const stats = [
+const AdminDashboard: React.FC = () => {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await api.get('/admin/dashboard');
+        if (response.ok) {
+          const data = await response.json();
+          setStats(data);
+        } else {
+          toast({
+            title: 'Error',
+            description: 'Failed to load dashboard statistics',
+            variant: 'destructive',
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching dashboard stats:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load dashboard statistics',
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <div className="text-center py-12 text-muted-foreground">Loading dashboard...</div>
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <div className="text-center py-12 text-muted-foreground">Failed to load dashboard data</div>
+      </div>
+    );
+  }
+
+  const displayStats = [
     {
       label: 'Total Students',
-      value: platformStats.totalStudents.toLocaleString(),
-      change: '+12%',
+      value: stats.totalStudents.toLocaleString(),
+      change: '+12%', // TODO: Calculate from previous period
       isPositive: true,
       icon: Users,
       color: 'bg-primary/10 text-primary'
     },
     {
       label: 'Total Courses',
-      value: platformStats.totalCourses,
-      change: '+3',
+      value: stats.totalCourses.toString(),
+      change: '+3', // TODO: Calculate from previous period
       isPositive: true,
       icon: BookOpen,
       color: 'bg-success/10 text-success'
     },
     {
-      label: 'Total Purchases',
-      value: platformStats.totalPurchases.toLocaleString(),
-      change: '+8%',
+      label: 'Total Enrollments',
+      value: stats.totalEnrollments.toLocaleString(),
+      change: '+8%', // TODO: Calculate from previous period
       isPositive: true,
       icon: ShoppingCart,
       color: 'bg-accent/10 text-accent'
     },
     {
       label: 'Avg. Completion',
-      value: `${platformStats.averageCompletionRate}%`,
-      change: '-2%',
+      value: `${stats.completionRate}%`,
+      change: '-2%', // TODO: Calculate from previous period
       isPositive: false,
       icon: TrendingUp,
       color: 'bg-warning/10 text-warning'
     }
   ];
-
-  const recentPurchases = mockStudents
-    .filter(s => s.purchasedCourses.length > 0)
-    .slice(0, 5)
-    .map(student => ({
-      student,
-      course: mockCourses.find(c => c.id === student.purchasedCourses[0])
-    }));
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -67,7 +118,7 @@ const AdminDashboard: React.FC = () => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat, index) => (
+        {displayStats.map((stat, index) => (
           <div key={index} className="bg-card rounded-xl border border-border p-6 shadow-card">
             <div className="flex items-start justify-between mb-4">
               <div className={`w-12 h-12 rounded-xl ${stat.color} flex items-center justify-center`}>
@@ -97,9 +148,8 @@ const AdminDashboard: React.FC = () => {
           </div>
           <div className="flex items-end gap-4">
             <div className="flex items-center gap-2">
-              <DollarSign className="w-8 h-8 text-success" />
               <span className="text-4xl font-bold text-foreground">
-                {platformStats.monthlyRevenue.toLocaleString()}
+                ₹{stats.totalRevenue.toLocaleString()}
               </span>
             </div>
           </div>
@@ -123,9 +173,9 @@ const AdminDashboard: React.FC = () => {
           </div>
           <div className="flex items-end gap-4">
             <span className="text-4xl font-bold text-foreground">
-              {platformStats.activeUsers.toLocaleString()}
+              {stats.totalStudents.toLocaleString()}
             </span>
-            <span className="text-muted-foreground text-sm mb-1">online now</span>
+            <span className="text-muted-foreground text-sm mb-1">total students</span>
           </div>
           {/* Chart Placeholder */}
           <div className="mt-6 h-40 bg-muted/50 rounded-lg flex items-center justify-center">
@@ -143,24 +193,30 @@ const AdminDashboard: React.FC = () => {
           <h2 className="text-lg font-semibold text-foreground">Recent Purchases</h2>
         </div>
         <div className="divide-y divide-border">
-          {recentPurchases.map(({ student, course }, index) => (
-            <div key={index} className="px-6 py-4 flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <span className="text-sm font-medium text-primary">
-                  {student.name.charAt(0)}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-foreground truncate">{student.name}</p>
-                <p className="text-sm text-muted-foreground truncate">
-                  Purchased {course?.title}
+          {stats.recentEnrollments.length === 0 ? (
+            <div className="px-6 py-8 text-center text-muted-foreground">
+              No recent enrollments
+            </div>
+          ) : (
+            stats.recentEnrollments.map((enrollment, index) => (
+              <div key={index} className="px-6 py-4 flex items-center gap-4">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-sm font-medium text-primary">
+                    {enrollment.studentName.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground truncate">{enrollment.studentName}</p>
+                  <p className="text-sm text-muted-foreground truncate">
+                    Enrolled in {enrollment.courseTitle}
+                  </p>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {new Date(enrollment.enrolledAt).toLocaleDateString()}
                 </p>
               </div>
-              <p className="text-sm font-medium text-foreground">
-                ${course?.price}
-              </p>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>

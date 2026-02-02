@@ -4,7 +4,8 @@ import { PrismaClient, UserRole } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Extend Express Request type
+// Extend Express Request type (namespace required for Express augmentation)
+/* eslint-disable @typescript-eslint/no-namespace */
 declare global {
   namespace Express {
     interface Request {
@@ -16,6 +17,7 @@ declare global {
     }
   }
 }
+/* eslint-enable @typescript-eslint/no-namespace */
 
 interface JwtPayload {
   userId: string;

@@ -16,7 +16,7 @@ export class S3Service {
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
       },
     });
-    this.bucket = process.env.AWS_S3_BUCKET || 'learnhub-videos';
+    this.bucket = process.env.AWS_S3_BUCKET || 'DataUniverse-videos';
   }
 
   /**

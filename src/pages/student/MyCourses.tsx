@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Link } from 'react-router-dom';
-import { mockCourses, calculateCourseProgress } from '@/data/mockData';
+import { api } from '@/lib/api';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { toast } from '@/hooks/use-toast';
 import { 
   BookOpen, 
   Clock, 
@@ -14,32 +15,85 @@ import {
   CheckCircle
 } from 'lucide-react';
 
+type Enrollment = {
+  id: string;
+  enrolledAt: string;
+  completedAt: string | null;
+  course: {
+    id: string;
+    title: string;
+    category: string;
+    level: string;
+    thumbnailUrl: string | null;
+    durationHours: number;
+  };
+  progress: number;
+  totalVideos: number;
+  completedVideos: number;
+};
+
 const MyCourses: React.FC = () => {
-  const { currentStudent } = useAuth();
+  const { isAuthenticated } = useAuth();
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // TODO: Fetch purchased courses from API when backend is connected
-  const purchasedCourses = mockCourses.filter(
-    course => currentStudent?.purchasedCourses.includes(course.id)
-  );
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
 
-  const getCompletedVideosCount = (courseId: string) => {
-    return currentStudent?.progress[courseId]?.completedVideos.length || 0;
-  };
+    const fetchEnrollments = async () => {
+      try {
+        const response = await api.get('/enrollments');
+        if (response.ok) {
+          const data = await response.json();
+          setEnrollments(data);
+        } else if (response.status !== 401) {
+          // 401: session expired, auth:session-expired will redirect to login
+          console.error('Failed to fetch enrollments');
+          toast({
+            title: 'Error',
+            description: 'Failed to load your courses',
+            variant: 'destructive',
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching enrollments:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load your courses',
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const getTotalVideosCount = (courseId: string) => {
-    const course = mockCourses.find(c => c.id === courseId);
-    return course?.modules.reduce((acc, m) => acc + m.videos.length, 0) || 0;
-  };
+    fetchEnrollments();
+  }, [isAuthenticated]);
+
+  if (loading) {
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <div>
+          <h1 className="text-3xl font-display font-bold text-foreground mb-2">My Learning</h1>
+          <p className="text-muted-foreground">Track your progress and continue where you left off</p>
+        </div>
+        <div className="text-center py-12 text-muted-foreground">Loading your courses...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-display font-bold text-foreground mb-2">My Learning</h1>
-        <p className="text-muted-foreground">Track your progress and continue where you left off</p>
+        <p className="text-muted-foreground">Course video lectures (uploaded content). Track your progress and continue where you left off. If you are in a regular batch, live lecture recordings are under Live Lectures.</p>
       </div>
 
-      {purchasedCourses.length === 0 ? (
+      {enrollments.length === 0 ? (
         <div className="bg-card rounded-xl border border-border p-12 text-center">
           <BookOpen className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-foreground mb-2">No courses yet</h3>
@@ -52,18 +106,13 @@ const MyCourses: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-4">
-          {purchasedCourses.map((course) => {
-            const courseProgress = currentStudent?.progress[course.id];
-            const progress = courseProgress 
-              ? calculateCourseProgress(course, courseProgress.completedVideos)
-              : 0;
-            const completedVideos = getCompletedVideosCount(course.id);
-            const totalVideos = getTotalVideosCount(course.id);
-            const isCompleted = progress === 100;
+          {enrollments.map((enrollment) => {
+            const progress = enrollment.progress;
+            const isCompleted = enrollment.completedAt !== null || progress === 100;
 
             return (
               <div
-                key={course.id}
+                key={enrollment.id}
                 className="bg-card rounded-xl border border-border shadow-card hover:shadow-card-hover transition-all duration-300 overflow-hidden"
               >
                 <div className="flex flex-col md:flex-row">
@@ -86,24 +135,20 @@ const MyCourses: React.FC = () => {
                   <div className="flex-1 p-6">
                     <div className="flex flex-col h-full">
                       <div className="flex-1">
-                        <p className="text-sm text-primary font-medium mb-1">{course.category}</p>
-                        <h3 className="text-xl font-semibold text-foreground mb-2">{course.title}</h3>
+                        <p className="text-sm text-primary font-medium mb-1">{enrollment.course.category}</p>
+                        <h3 className="text-xl font-semibold text-foreground mb-2">{enrollment.course.title}</h3>
                         <p className="text-sm text-muted-foreground mb-4">
-                          by {course.instructor}
+                          Enrolled {new Date(enrollment.enrolledAt).toLocaleDateString()}
                         </p>
 
                         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-4">
                           <div className="flex items-center gap-1.5">
                             <Clock className="w-4 h-4" />
-                            {course.duration}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <BookOpen className="w-4 h-4" />
-                            {course.modules.length} Modules
+                            {enrollment.course.durationHours} hrs
                           </div>
                           <div className="flex items-center gap-1.5">
                             <CheckCircle className="w-4 h-4" />
-                            {completedVideos} / {totalVideos} Videos
+                            {enrollment.completedVideos} / {enrollment.totalVideos} Videos
                           </div>
                         </div>
                       </div>
@@ -119,7 +164,7 @@ const MyCourses: React.FC = () => {
                           indicatorClassName={isCompleted ? "gradient-success" : "gradient-primary"}
                         />
                         <div className="flex justify-end pt-2">
-                          <Link to={`/student/course/${course.id}`}>
+                          <Link to={`/student/course/${enrollment.course.id}`}>
                             <Button className="gap-2">
                               {isCompleted ? 'Review Course' : progress > 0 ? 'Continue Learning' : 'Start Learning'}
                               <ArrowRight className="w-4 h-4" />

@@ -1,13 +1,16 @@
+import React, { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Pages
 import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
 import StudentLayout from "./components/layout/StudentLayout";
+import InstructorLayout from "./components/layout/InstructorLayout";
 import StudentDashboard from "./pages/student/StudentDashboard";
 import CourseMarketplace from "./pages/student/CourseMarketplace";
 import MyCourses from "./pages/student/MyCourses";
@@ -19,53 +22,211 @@ import AdminCourses from "./pages/admin/AdminCourses";
 import AdminStudents from "./pages/admin/AdminStudents";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import AdminProfile from "./pages/admin/AdminProfile";
+import AdminVideoUpload from "./pages/admin/AdminVideoUpload";
+import AdminCourseEdit from "./pages/admin/AdminCourseEdit";
+import AdminScreenTime from "./pages/admin/AdminScreenTime";
+import AdminInstructors from "./pages/admin/AdminInstructors";
+import AdminAlumniVideos from "./pages/admin/AdminAlumniVideos";
+import AdminPolicies from "./pages/admin/AdminPolicies";
+import AdminInterviews from "./pages/admin/AdminInterviews";
+import AdminLiveLectures from "./pages/admin/AdminLiveLectures";
+import AdminNotices from "./pages/admin/AdminNotices";
+import AdminPromoBanners from "./pages/admin/AdminPromoBanners";
+import LiveLectures from "./pages/student/LiveLectures";
+import LiveLectureJoin from "./pages/student/LiveLectureJoin";
 import NotFound from "./pages/NotFound";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import MySubmissions from "./pages/student/MySubmissions";
+import MyInterviews from "./pages/student/MyInterviews";
+import AlumniVideos from "./pages/student/AlumniVideos";
+import Policies from "./pages/student/Policies";
+import InstructorSubmissions from "./pages/instructor/InstructorSubmissions";
+import InstructorInterviews from "./pages/instructor/InstructorInterviews";
 
 const queryClient = new QueryClient();
 
+// Login redirect component - handles when authenticated user visits /login
+const LoginRedirect = ({ userRole }: { userRole: 'student' | 'admin' | 'instructor' | null }) => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const redirectUrl = urlParams.get('redirect');
+
+  useEffect(() => {
+    if (redirectUrl) {
+      const decodedUrl = decodeURIComponent(redirectUrl);
+      window.location.href = decodedUrl;
+    }
+  }, [redirectUrl]);
+  
+  if (redirectUrl) {
+    // Show loading while redirecting
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <div className="text-sm text-muted-foreground">Redirecting...</div>
+        </div>
+      </div>
+    );
+  }
+  
+  // Otherwise navigate based on role
+  if (userRole === 'admin') {
+    return <Navigate to="/admin/dashboard" replace />;
+  } else if (userRole === 'instructor') {
+    return <Navigate to="/instructor/submissions" replace />;
+  } else {
+    return <Navigate to="/student/dashboard" replace />;
+  }
+};
+
 // Protected Route Components
 const StudentRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated, userRole } = useAuth();
-  if (!isAuthenticated) return <Navigate to="/login" />;
-  if (userRole !== 'student') return <Navigate to="/admin/dashboard" />;
+  const { isAuthenticated, userRole, isLoading } = useAuth();
+  const location = useLocation();
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <div className="text-sm text-muted-foreground">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+  if (!isAuthenticated) {
+    const returnUrl = location.pathname + location.search;
+    return <Navigate to={returnUrl ? `/login?redirect=${encodeURIComponent(returnUrl)}` : '/login'} replace />;
+  }
+  // Only allow students - instructors have their own routes
+  if (userRole === 'instructor') return <Navigate to="/instructor/submissions" />;
+  if (userRole === 'admin') return <Navigate to="/admin/dashboard" />;
   return <StudentLayout>{children}</StudentLayout>;
 };
 
+const InstructorRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, userRole, isLoading } = useAuth();
+  
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <div className="text-sm text-muted-foreground">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
+  const currentPath = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '';
+
+  if (!isAuthenticated) {
+    return <Navigate to={currentPath ? `/login?redirect=${encodeURIComponent(currentPath)}` : '/login'} replace />;
+  }
+
+  // Require instructor role; if logged in as student/admin, send to login with redirect so they can sign in as instructor (e.g. review link from email)
+  if (userRole !== 'instructor') {
+    return <Navigate to={`/login?redirect=${encodeURIComponent(currentPath || '/instructor/submissions')}`} replace />;
+  }
+
+  return <InstructorLayout>{children}</InstructorLayout>;
+};
+
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated, userRole } = useAuth();
+  const { isAuthenticated, userRole, isLoading } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <div className="text-sm text-muted-foreground">Loading...</div>
+        </div>
+      </div>
+    );
+  }
   if (!isAuthenticated) return <Navigate to="/login" />;
-  if (userRole !== 'admin') return <Navigate to="/student/dashboard" />;
+  if (userRole !== 'admin') {
+    if (userRole === 'instructor') return <Navigate to="/instructor/submissions" replace />;
+    return <Navigate to="/student/dashboard" replace />;
+  }
   return <AdminLayout>{children}</AdminLayout>;
 };
 
 const AppRoutes = () => {
-  const { isAuthenticated, userRole } = useAuth();
+  const { isAuthenticated, userRole, isLoading } = useAuth();
+
+  // Show loading state while restoring session
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <div className="text-sm text-muted-foreground">Loading...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Routes>
       <Route path="/" element={
         isAuthenticated 
-          ? <Navigate to={userRole === 'admin' ? '/admin/dashboard' : '/student/dashboard'} />
-          : <Navigate to="/login" />
+          ? <Navigate to={userRole === 'admin' ? '/admin/dashboard' : userRole === 'instructor' ? '/instructor/submissions' : '/student/dashboard'} replace />
+          : <Navigate to="/login" replace />
       } />
       <Route path="/login" element={
         isAuthenticated 
-          ? <Navigate to={userRole === 'admin' ? '/admin/dashboard' : '/student/dashboard'} />
+          ? <LoginRedirect userRole={userRole} />
           : <LoginPage />
       } />
+      <Route path="/register" element={
+        isAuthenticated 
+          ? <Navigate to={userRole === 'admin' ? '/admin/dashboard' : userRole === 'instructor' ? '/instructor/submissions' : '/student/dashboard'} />
+          : <RegisterPage />
+      } />
+      <Route path="/forgot-password" element={
+        isAuthenticated 
+          ? <Navigate to={userRole === 'admin' ? '/admin/dashboard' : userRole === 'instructor' ? '/instructor/submissions' : '/student/dashboard'} />
+          : <ForgotPasswordPage />
+      } />
+      <Route path="/reset-password" element={
+        isAuthenticated 
+          ? <Navigate to={userRole === 'admin' ? '/admin/dashboard' : userRole === 'instructor' ? '/instructor/submissions' : '/student/dashboard'} />
+          : <ResetPasswordPage />
+      } />
       
-      {/* Student Routes */}
+      {/* Student Routes (also accessible by instructors) */}
       <Route path="/student/dashboard" element={<StudentRoute><StudentDashboard /></StudentRoute>} />
       <Route path="/student/marketplace" element={<StudentRoute><CourseMarketplace /></StudentRoute>} />
       <Route path="/student/my-courses" element={<StudentRoute><MyCourses /></StudentRoute>} />
       <Route path="/student/course/:courseId" element={<StudentRoute><CourseDetail /></StudentRoute>} />
       <Route path="/student/profile" element={<StudentRoute><StudentProfile /></StudentRoute>} />
+      <Route path="/student/submissions" element={<StudentRoute><MySubmissions /></StudentRoute>} />
+      <Route path="/student/interviews" element={<StudentRoute><MyInterviews /></StudentRoute>} />
+      <Route path="/student/live-lectures" element={<StudentRoute><LiveLectures /></StudentRoute>} />
+      <Route path="/student/live-lectures/join" element={<LiveLectureJoin />} />
+      <Route path="/student/alumni" element={<StudentRoute><AlumniVideos /></StudentRoute>} />
+      <Route path="/student/policies" element={<StudentRoute><Policies /></StudentRoute>} />
+      
+      {/* Instructor Routes */}
+      <Route path="/instructor/submissions" element={<InstructorRoute><InstructorSubmissions /></InstructorRoute>} />
+      <Route path="/instructor/interviews" element={<InstructorRoute><InstructorInterviews /></InstructorRoute>} />
       
       {/* Admin Routes */}
       <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
       <Route path="/admin/courses" element={<AdminRoute><AdminCourses /></AdminRoute>} />
+      <Route path="/admin/courses/:courseId/edit" element={<AdminRoute><AdminCourseEdit /></AdminRoute>} />
+      <Route path="/admin/videos/:videoId/upload" element={<AdminRoute><AdminVideoUpload /></AdminRoute>} />
       <Route path="/admin/students" element={<AdminRoute><AdminStudents /></AdminRoute>} />
       <Route path="/admin/analytics" element={<AdminRoute><AdminAnalytics /></AdminRoute>} />
+      <Route path="/admin/screentime" element={<AdminRoute><AdminScreenTime /></AdminRoute>} />
+      <Route path="/admin/instructors" element={<AdminRoute><AdminInstructors /></AdminRoute>} />
+      <Route path="/admin/alumni" element={<AdminRoute><AdminAlumniVideos /></AdminRoute>} />
+      <Route path="/admin/policies" element={<AdminRoute><AdminPolicies /></AdminRoute>} />
+      <Route path="/admin/interviews" element={<AdminRoute><AdminInterviews /></AdminRoute>} />
+      <Route path="/admin/live-lectures" element={<AdminRoute><AdminLiveLectures /></AdminRoute>} />
+      <Route path="/admin/notices" element={<AdminRoute><AdminNotices /></AdminRoute>} />
+      <Route path="/admin/banners" element={<AdminRoute><AdminPromoBanners /></AdminRoute>} />
       <Route path="/admin/profile" element={<AdminRoute><AdminProfile /></AdminRoute>} />
       
       <Route path="*" element={<NotFound />} />
@@ -74,17 +235,18 @@ const AppRoutes = () => {
 };
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </TooltipProvider>
-    </AuthProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </TooltipProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

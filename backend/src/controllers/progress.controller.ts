@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { emailService } from '../services/email.service';
 
 const prisma = new PrismaClient();
 
@@ -25,18 +26,13 @@ export class ProgressController {
         return;
       }
 
-      // Get all videos in course
+      // Get all videos in course (flat list)
       const course = await prisma.course.findUnique({
         where: { id: courseId },
         include: {
-          modules: {
-            include: {
-              videos: {
-                select: { id: true, title: true, durationMinutes: true },
-                orderBy: { sortOrder: 'asc' },
-              },
-            },
-            orderBy: { sortOrder: 'asc' },
+          videos: {
+            select: { id: true, title: true, durationMinutes: true },
+            orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
           },
         },
       });
@@ -46,44 +42,21 @@ export class ProgressController {
         return;
       }
 
-      // Get progress for all videos
       const videoProgress = await prisma.videoProgress.findMany({
         where: {
           userId,
-          video: {
-            module: { courseId },
-          },
+          video: { courseId },
         },
       });
 
       const progressMap = new Map(videoProgress.map(p => [p.videoId, p]));
-
-      // Calculate module progress
-      const modulesWithProgress = course.modules.map(module => {
-        const videosWithProgress = module.videos.map(video => ({
-          ...video,
-          isCompleted: progressMap.get(video.id)?.isCompleted || false,
-          watchTimeSeconds: progressMap.get(video.id)?.watchTimeSeconds || 0,
-        }));
-
-        const completedInModule = videosWithProgress.filter(v => v.isCompleted).length;
-        const moduleProgress = module.videos.length > 0
-          ? Math.round((completedInModule / module.videos.length) * 100)
-          : 0;
-
-        return {
-          id: module.id,
-          title: module.title,
-          videos: videosWithProgress,
-          progress: moduleProgress,
-          completedCount: completedInModule,
-          totalCount: module.videos.length,
-        };
-      });
-
-      // Calculate overall progress
-      const totalVideos = course.modules.reduce((acc, m) => acc + m.videos.length, 0);
-      const completedVideos = videoProgress.filter(p => p.isCompleted).length;
+      const videosWithProgress = course.videos.map(video => ({
+        ...video,
+        isCompleted: progressMap.get(video.id)?.isCompleted || false,
+        watchTimeSeconds: progressMap.get(video.id)?.watchTimeSeconds || 0,
+      }));
+      const completedVideos = videosWithProgress.filter(v => v.isCompleted).length;
+      const totalVideos = course.videos.length;
       const overallProgress = totalVideos > 0
         ? Math.round((completedVideos / totalVideos) * 100)
         : 0;
@@ -94,7 +67,14 @@ export class ProgressController {
         overallProgress,
         totalVideos,
         completedVideos,
-        modules: modulesWithProgress,
+        modules: [{
+          id: 'course',
+          title: 'Content',
+          videos: videosWithProgress,
+          progress: overallProgress,
+          completedCount: completedVideos,
+          totalCount: totalVideos,
+        }],
       });
     } catch (error) {
       console.error('Get course progress error:', error);
@@ -115,9 +95,7 @@ export class ProgressController {
       const video = await prisma.video.findUnique({
         where: { id: videoId },
         include: {
-          module: {
-            include: { course: true },
-          },
+          course: { select: { id: true, title: true } },
         },
       });
 
@@ -130,7 +108,7 @@ export class ProgressController {
         where: {
           userId_courseId: {
             userId,
-            courseId: video.module.courseId,
+            courseId: video.courseId,
           },
         },
       });
@@ -159,48 +137,65 @@ export class ProgressController {
       });
 
       // Check if course is now complete
-      const courseId = video.module.courseId;
+      const courseId = video.courseId;
       const totalVideos = await prisma.video.count({
-        where: {
-          module: { courseId },
-        },
+        where: { courseId },
       });
 
       const completedVideos = await prisma.videoProgress.count({
         where: {
           userId,
           isCompleted: true,
-          video: {
-            module: { courseId },
-          },
+          video: { courseId },
         },
       });
 
       // If all videos complete, update enrollment and create certificate
+      let courseJustCompleted = false;
       if (completedVideos === totalVideos) {
-        await prisma.$transaction([
-          prisma.enrollment.update({
-            where: {
-              userId_courseId: { userId, courseId },
-            },
-            data: { completedAt: new Date() },
-          }),
-          prisma.certificate.upsert({
-            where: {
-              userId_courseId: { userId, courseId },
-            },
-            update: {},
-            create: {
-              userId,
-              courseId,
-            },
-          }),
-        ]);
+        // Check if not already completed
+        if (!enrollment.completedAt) {
+          courseJustCompleted = true;
+          
+          await prisma.$transaction([
+            prisma.enrollment.update({
+              where: {
+                userId_courseId: { userId, courseId },
+              },
+              data: { completedAt: new Date() },
+            }),
+            prisma.certificate.upsert({
+              where: {
+                userId_courseId: { userId, courseId },
+              },
+              update: {},
+              create: {
+                userId,
+                courseId,
+              },
+            }),
+          ]);
+
+          // Send course completion email
+          const user = await prisma.user.findUnique({
+            where: { id: userId },
+            include: { profile: true },
+          });
+
+          if (user) {
+            emailService.sendCourseCompletionEmail(
+              user.email,
+              video.course!.title,
+              user.profile?.fullName || undefined
+            ).catch(err => console.error('Failed to send completion email:', err));
+          }
+        }
       }
 
       res.json({
         progress,
         courseCompleted: completedVideos === totalVideos,
+        courseJustCompleted,
         completedVideos,
         totalVideos,
       });
@@ -260,11 +255,7 @@ export class ProgressController {
         include: {
           course: {
             include: {
-              modules: {
-                include: {
-                  videos: { select: { id: true } },
-                },
-              },
+              videos: { select: { id: true } },
             },
           },
         },
@@ -283,13 +274,11 @@ export class ProgressController {
       let totalCompleted = 0;
 
       enrollments.forEach(enrollment => {
-        enrollment.course.modules.forEach(module => {
-          totalVideos += module.videos.length;
-          module.videos.forEach(video => {
-            if (completedVideoIds.has(video.id)) {
-              totalCompleted++;
-            }
-          });
+        enrollment.course.videos.forEach(video => {
+          totalVideos++;
+          if (completedVideoIds.has(video.id)) {
+            totalCompleted++;
+          }
         });
       });
 

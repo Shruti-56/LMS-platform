@@ -1,23 +1,84 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { GraduationCap, Shield, BookOpen, Users, TrendingUp, Award } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { toast } from '@/hooks/use-toast';
+import { GraduationCap, Shield, BookOpen, Users, TrendingUp, Award, UserCheck } from 'lucide-react';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { loginAsStudent, loginAsAdmin } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { login, isAuthenticated, userRole } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [loginType, setLoginType] = useState<'student' | 'admin' | 'instructor' | null>(null);
+  const redirectUrlRef = useRef<string | null>(null);
 
-  const handleStudentLogin = () => {
-    // TODO: Replace with real authentication API call
-    loginAsStudent();
-    navigate('/student/dashboard');
+  const handleLoginTypeSelect = (type: 'student' | 'admin' | 'instructor') => {
+    setLoginType(type);
+    setShowForm(true);
   };
 
-  const handleAdminLogin = () => {
-    // TODO: Replace with real authentication API call
-    loginAsAdmin();
-    navigate('/admin/dashboard');
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!email || !password) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please enter both email and password',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    const result = await login(email.trim().toLowerCase(), password);
+    setIsLoading(false);
+
+    if (result.success) {
+      toast({
+        title: 'Login Successful',
+        description: 'Welcome back!',
+      });
+      // Preserve redirect from URL so useEffect can send user to the right page after auth state updates
+      redirectUrlRef.current = searchParams.get('redirect');
+      // Don't navigate here - let useEffect handle it after auth state updates
+    } else {
+      toast({
+        title: 'Login Failed',
+        description: result.error || 'Invalid credentials',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Handle navigation after successful login and auth state update
+  useEffect(() => {
+    if (isAuthenticated && redirectUrlRef.current) {
+      const decodedUrl = decodeURIComponent(redirectUrlRef.current);
+      redirectUrlRef.current = null;
+      // Full navigation so query params (e.g. submissionId) are preserved
+      window.location.href = decodedUrl;
+    } else if (isAuthenticated && !redirectUrlRef.current && userRole) {
+      if (userRole === 'admin') {
+        navigate('/admin/dashboard', { replace: true });
+      } else if (userRole === 'instructor') {
+        navigate('/instructor/submissions', { replace: true });
+      } else {
+        navigate('/student/dashboard', { replace: true });
+      }
+    }
+  }, [isAuthenticated, userRole, navigate]);
+
+  const handleBack = () => {
+    setShowForm(false);
+    setLoginType(null);
+    setEmail('');
+    setPassword('');
   };
 
   return (
@@ -33,7 +94,7 @@ const LoginPage: React.FC = () => {
             <div className="w-12 h-12 gradient-accent rounded-xl flex items-center justify-center">
               <GraduationCap className="w-7 h-7 text-foreground" />
             </div>
-            <span className="text-2xl font-display font-bold text-primary-foreground">LearnHub</span>
+            <span className="text-2xl font-display font-bold text-primary-foreground">DataUniverse</span>
           </div>
         </div>
 
@@ -69,7 +130,7 @@ const LoginPage: React.FC = () => {
 
         <div className="relative z-10">
           <p className="text-sm text-primary-foreground/60">
-            © 2024 LearnHub. All rights reserved.
+            © 2024 DataUniverse. All rights reserved.
           </p>
         </div>
       </div>
@@ -82,7 +143,7 @@ const LoginPage: React.FC = () => {
             <div className="w-10 h-10 gradient-primary rounded-xl flex items-center justify-center">
               <GraduationCap className="w-6 h-6 text-primary-foreground" />
             </div>
-            <span className="text-xl font-display font-bold text-foreground">LearnHub</span>
+            <span className="text-xl font-display font-bold text-foreground">DataUniverse</span>
           </div>
 
           <div className="text-center space-y-2">
@@ -90,49 +151,135 @@ const LoginPage: React.FC = () => {
             <p className="text-muted-foreground">Choose how you'd like to access the platform</p>
           </div>
 
-          <div className="space-y-4">
-            {/* Student Login */}
-            <button
-              onClick={handleStudentLogin}
-              className="w-full p-6 rounded-xl border-2 border-border bg-card hover:border-primary hover:shadow-card-hover transition-all duration-300 group"
-            >
-              <div className="flex items-start gap-4">
-                <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center group-hover:gradient-primary transition-all duration-300">
-                  <GraduationCap className="w-7 h-7 text-primary group-hover:text-primary-foreground transition-colors" />
-                </div>
-                <div className="text-left flex-1">
-                  <h3 className="text-lg font-semibold text-foreground mb-1">Student Login</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Access your courses, track progress, and continue learning
-                  </p>
-                </div>
-              </div>
-            </button>
-
-            {/* Admin Login */}
-            <button
-              onClick={handleAdminLogin}
-              className="w-full p-6 rounded-xl border-2 border-border bg-card hover:border-accent hover:shadow-card-hover transition-all duration-300 group"
-            >
-              <div className="flex items-start gap-4">
-                <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center group-hover:gradient-accent transition-all duration-300">
-                  <Shield className="w-7 h-7 text-primary group-hover:text-accent-foreground transition-colors" />
-                </div>
-                <div className="text-left flex-1">
-                  <h3 className="text-lg font-semibold text-foreground mb-1">Admin Login</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Manage courses, students, and platform settings
-                  </p>
-                </div>
-              </div>
-            </button>
-          </div>
-
-          <div className="pt-4">
-            <p className="text-center text-sm text-muted-foreground">
-              <span className="text-destructive font-medium">Demo Mode:</span> No password required. Click to simulate login.
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground">
+              Don't have an account?{' '}
+              <Link to="/register" className="text-primary hover:underline font-medium">
+                Sign up
+              </Link>
             </p>
           </div>
+
+          {!showForm ? (
+            <>
+              <div className="space-y-4">
+                {/* Student Login */}
+                <button
+                  onClick={() => handleLoginTypeSelect('student')}
+                  className="w-full p-6 rounded-xl border-2 border-border bg-card hover:border-primary hover:shadow-card-hover transition-all duration-300 group"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center group-hover:gradient-primary transition-all duration-300">
+                      <GraduationCap className="w-7 h-7 text-primary group-hover:text-primary-foreground transition-colors" />
+                    </div>
+                    <div className="text-left flex-1">
+                      <h3 className="text-lg font-semibold text-foreground mb-1">Student Login</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Access your courses, track progress, and continue learning
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Instructor Login */}
+                <button
+                  onClick={() => handleLoginTypeSelect('instructor')}
+                  className="w-full p-6 rounded-xl border-2 border-border bg-card hover:border-primary hover:shadow-card-hover transition-all duration-300 group"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center group-hover:gradient-primary transition-all duration-300">
+                      <UserCheck className="w-7 h-7 text-primary group-hover:text-primary-foreground transition-colors" />
+                    </div>
+                    <div className="text-left flex-1">
+                      <h3 className="text-lg font-semibold text-foreground mb-1">Instructor Login</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Review student submissions and provide feedback
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Admin Login */}
+                <button
+                  onClick={() => handleLoginTypeSelect('admin')}
+                  className="w-full p-6 rounded-xl border-2 border-border bg-card hover:border-accent hover:shadow-card-hover transition-all duration-300 group"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center group-hover:gradient-accent transition-all duration-300">
+                      <Shield className="w-7 h-7 text-primary group-hover:text-accent-foreground transition-colors" />
+                    </div>
+                    <div className="text-left flex-1">
+                      <h3 className="text-lg font-semibold text-foreground mb-1">Admin Login</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Manage courses, students, and platform settings
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </>
+          ) : (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleBack}
+                  className="gap-2"
+                >
+                  ← Back
+                </Button>
+                <h3 className="text-lg font-semibold">
+                  {loginType === 'admin' ? 'Admin' : loginType === 'instructor' ? 'Instructor' : 'Student'} Login
+                </h3>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={isLoading}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  <Link 
+                    to="/forgot-password" 
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Forgot Password?
+                  </Link>
+                </div>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={isLoading}
+                  required
+                />
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full"
+                size="lg"
+                disabled={isLoading}
+              >
+                {isLoading ? 'Logging in...' : 'Sign In'}
+              </Button>
+            </form>
+          )}
         </div>
       </div>
     </div>

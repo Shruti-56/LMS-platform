@@ -6,15 +6,30 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database...');
 
+  // Clean up existing data (in correct order for foreign keys)
+  console.log('🗑️  Cleaning existing data...');
+  await prisma.certificate.deleteMany();
+  await prisma.videoProgress.deleteMany();
+  await prisma.purchase.deleteMany();
+  await prisma.enrollment.deleteMany();
+  await prisma.video.deleteMany();
+  await prisma.module.deleteMany();
+  await prisma.course.deleteMany();
+  await prisma.promoBanner.deleteMany();
+  await prisma.profile.deleteMany();
+  await prisma.user.deleteMany();
+  console.log('✅ Database cleaned');
+
+  // Hash passwords
+  const adminPassword = await bcrypt.hash('Admin123!', 12);
+  const studentPassword = await bcrypt.hash('Student123!', 12);
+
   // Create admin user
-  const adminPassword = await bcrypt.hash('admin123', 12);
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@learnhub.com' },
-    update: {},
-    create: {
-      email: 'admin@learnhub.com',
+  const admin = await prisma.user.create({
+    data: {
+      email: 'admin@datauniverse.com',
       passwordHash: adminPassword,
-      roles: [UserRole.ADMIN],
+      role: UserRole.ADMIN,
       profile: {
         create: {
           fullName: 'Admin User',
@@ -22,17 +37,15 @@ async function main() {
       },
     },
   });
+  
   console.log('✅ Admin user created:', admin.email);
 
   // Create student user
-  const studentPassword = await bcrypt.hash('student123', 12);
-  const student = await prisma.user.upsert({
-    where: { email: 'student@learnhub.com' },
-    update: {},
-    create: {
-      email: 'student@learnhub.com',
+  const student = await prisma.user.create({
+    data: {
+      email: 'student@datauniverse.com',
       passwordHash: studentPassword,
-      roles: [UserRole.STUDENT],
+      role: UserRole.STUDENT,
       profile: {
         create: {
           fullName: 'John Doe',
@@ -40,13 +53,14 @@ async function main() {
       },
     },
   });
+  
   console.log('✅ Student user created:', student.email);
 
-  // Create courses with modules and videos
+  // Create courses with modules and videos (videos without URLs - to be uploaded via admin)
   const coursesData = [
     {
       title: 'Data Analytics Fundamentals',
-      description: 'Master the essentials of data analytics with Python, SQL, Power BI, and Excel.',
+      description: 'Master the essentials of data analytics with Python, SQL, Power BI, and Excel. This comprehensive course will teach you everything you need to start your career in data analytics.',
       category: CourseCategory.DATA_ANALYTICS,
       level: CourseLevel.BEGINNER,
       price: 49.99,
@@ -92,7 +106,7 @@ async function main() {
     },
     {
       title: 'Data Engineering Bootcamp',
-      description: 'Build robust data pipelines with Python, SQL, Spark, and Airflow.',
+      description: 'Build robust data pipelines with Python, SQL, Spark, and Airflow. Learn to architect scalable data solutions used by top tech companies.',
       category: CourseCategory.DATA_ENGINEERING,
       level: CourseLevel.INTERMEDIATE,
       price: 79.99,
@@ -138,7 +152,7 @@ async function main() {
     },
     {
       title: 'Data Science Masterclass',
-      description: 'From statistics to deep learning - become a complete data scientist.',
+      description: 'From statistics to deep learning - become a complete data scientist. Master the skills needed to solve real-world problems with data.',
       category: CourseCategory.DATA_SCIENCE,
       level: CourseLevel.ADVANCED,
       price: 99.99,
@@ -202,6 +216,7 @@ async function main() {
               create: module.videos.map((video, videoIndex) => ({
                 title: video.title,
                 durationMinutes: video.duration,
+                // videoUrl is null - to be uploaded via admin panel
                 sortOrder: videoIndex,
               })),
             },
@@ -212,12 +227,52 @@ async function main() {
     console.log(`✅ Course created: ${course.title}`);
   }
 
+  // Default promo banners (student dashboard carousel)
+  await prisma.promoBanner.createMany({
+    data: [
+      {
+        title: 'New Course Launching Soon!',
+        subtitle: 'Data Engineering Mastery — Build real-world pipelines. Be the first to know when we go live.',
+        badge: 'Coming Soon',
+        ctaText: 'Notify Me',
+        ctaLink: '/student/marketplace',
+        gradient: 'from-violet-600 via-purple-600 to-indigo-700',
+        sortOrder: 0,
+        isActive: true,
+      },
+      {
+        title: 'Early Bird Offer — 20% Off',
+        subtitle: 'Enroll in any new course this month and get an exclusive discount. Don\'t miss out!',
+        badge: 'Limited Time',
+        ctaText: 'Browse Courses',
+        ctaLink: '/student/marketplace',
+        gradient: 'from-amber-500 via-orange-500 to-rose-500',
+        sortOrder: 1,
+        isActive: true,
+      },
+      {
+        title: 'Level Up Your Data Skills',
+        subtitle: 'New batches starting this month — Data Analytics, Data Science & more. Secure your seat.',
+        badge: 'New Batches',
+        ctaText: 'Explore Now',
+        ctaLink: '/student/marketplace',
+        gradient: 'from-emerald-600 via-teal-600 to-cyan-600',
+        sortOrder: 2,
+        isActive: true,
+      },
+    ],
+  });
+  console.log('✅ Promo banners created');
+
   console.log('');
   console.log('🎉 Seed completed!');
   console.log('');
   console.log('📧 Test accounts:');
-  console.log('   Admin: admin@learnhub.com / admin123');
-  console.log('   Student: student@learnhub.com / student123');
+  console.log('   Admin: admin@datauniverse.com / Admin123!');
+  console.log('   Student: student@datauniverse.com / Student123!');
+  console.log('');
+  console.log('📺 Videos need to be uploaded via Admin Panel → Courses → Edit Video');
+  console.log('   Videos will be stored in AWS S3');
 }
 
 main()

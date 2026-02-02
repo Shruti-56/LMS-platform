@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { mockStudents, mockCourses, calculateCourseProgress, Student } from '@/data/mockData';
+import React, { useState, useEffect } from 'react';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -10,7 +10,11 @@ import {
   Mail,
   Calendar,
   BookOpen,
-  Eye
+  Eye,
+  Clock,
+  Award,
+  UserCheck,
+  UserPlus
 } from 'lucide-react';
 import {
   Dialog,
@@ -20,53 +24,380 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from '@/hooks/use-toast';
 
+type Student = {
+  id: string;
+  email: string;
+  fullName: string | null;
+  avatarUrl: string | null;
+  isBlocked: boolean;
+  enrolledCourses: number;
+  certificates: number;
+  createdAt: string;
+};
+
+type CourseProgress = {
+  completedVideos: number;
+  totalVideos: number;
+  percent: number;
+};
+
+type EnrollmentWithProgress = {
+  id: string;
+  enrolledAt: string;
+  completedAt: string | null;
+  course: {
+    id: string;
+    title: string;
+    category: string;
+    level: string;
+  };
+  progress: CourseProgress;
+};
+
+type StudentDetails = {
+  id: string;
+  email: string;
+  createdAt: string;
+  profile: {
+    fullName: string | null;
+    avatarUrl: string | null;
+    isBlocked: boolean;
+  } | null;
+  enrollments: EnrollmentWithProgress[];
+  certificates: Array<{
+    id: string;
+    course: {
+      id: string;
+      title: string;
+    };
+  }>;
+  screenTime: {
+    weeklySeconds: number;
+    lastActive: string | null;
+  };
+};
+
+const formatTime = (seconds: number): string => {
+  if (seconds < 60) return `${seconds}s`;
+  const hours = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) {
+    return `${hours}h ${mins}m`;
+  }
+  return `${mins}m`;
+};
+
 const AdminStudents: React.FC = () => {
-  // TODO: Fetch students from API when backend is connected
-  const [students, setStudents] = useState(mockStudents);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<StudentDetails | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [instructors, setInstructors] = useState<Array<{id: string; email: string; fullName: string}>>([]);
+  const [showInstructorDialog, setShowInstructorDialog] = useState(false);
+  const [selectedStudentForInstructor, setSelectedStudentForInstructor] = useState<string | null>(null);
+  const [selectedInstructorId, setSelectedInstructorId] = useState<string>('');
+  const [showGrantCourseDialog, setShowGrantCourseDialog] = useState(false);
+  const [courses, setCourses] = useState<Array<{id: string; title: string}>>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
+  const [showRegisterDialog, setShowRegisterDialog] = useState(false);
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerFullName, setRegisterFullName] = useState('');
+  const [registerBatchIds, setRegisterBatchIds] = useState<string[]>([]);
+  const [batches, setBatches] = useState<Array<{id: string; name: string}>>([]);
+  const [registering, setRegistering] = useState(false);
+
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        const response = await api.get('/admin/students');
+        if (response.ok) {
+          const data = await response.json();
+          setStudents(data);
+        } else {
+          toast({
+            title: 'Error',
+            description: 'Failed to load students',
+            variant: 'destructive',
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching students:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load students',
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const fetchInstructors = async () => {
+      try {
+        const response = await api.get('/admin/instructors');
+        if (response.ok) {
+          const data = await response.json();
+          setInstructors(data.map((i: { id: string; email: string; fullName?: string }) => ({ id: i.id, email: i.email, fullName: i.fullName })));
+        }
+      } catch (error) {
+        console.error('Error fetching instructors:', error);
+      }
+    };
+
+    const fetchCourses = async () => {
+      try {
+        const response = await api.get('/admin/courses');
+        if (response.ok) {
+          const data = await response.json();
+          setCourses(data.map((c: { id: string; title: string }) => ({ id: c.id, title: c.title })));
+        }
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+      }
+    };
+
+    const fetchBatches = async () => {
+      try {
+        const res = await api.get('/admin/live-lecture-batches');
+        if (res.ok) {
+          const data = await res.json();
+          setBatches(data.map((b: { id: string; name: string }) => ({ id: b.id, name: b.name })));
+        }
+      } catch (e) {
+        console.error('Fetch batches error', e);
+      }
+    };
+    fetchStudents();
+    fetchInstructors();
+    fetchCourses();
+    fetchBatches();
+  }, []);
+
+  const fetchStudentDetails = async (studentId: string) => {
+    setLoadingDetails(true);
+    try {
+      const response = await api.get(`/admin/students/${studentId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedStudent(data);
+      } else {
+        toast({
+          title: 'Error',
+          description: 'Failed to load student details',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching student details:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load student details',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
 
   const filteredStudents = students.filter(student =>
-    student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (student.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
     student.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const toggleBlockStatus = (studentId: string) => {
-    // TODO: Update block status via API when backend is connected
-    setStudents(prev => 
-      prev.map(s => 
-        s.id === studentId ? { ...s, isBlocked: !s.isBlocked } : s
-      )
-    );
-    
-    const student = students.find(s => s.id === studentId);
-    toast({
-      title: student?.isBlocked ? "Student Unblocked" : "Student Blocked",
-      description: `${student?.name} has been ${student?.isBlocked ? 'unblocked' : 'blocked'}.`
-    });
+  const openInstructorDialog = (studentId: string) => {
+    setSelectedStudentForInstructor(studentId);
+    setSelectedInstructorId('');
+    setShowInstructorDialog(true);
   };
 
-  const getStudentProgress = (student: Student) => {
-    if (student.purchasedCourses.length === 0) return 0;
-    
-    let totalProgress = 0;
-    student.purchasedCourses.forEach(courseId => {
-      const course = mockCourses.find(c => c.id === courseId);
-      const progress = student.progress[courseId];
-      if (course && progress) {
-        totalProgress += calculateCourseProgress(course, progress.completedVideos);
+  const assignInstructor = async () => {
+    if (!selectedStudentForInstructor || !selectedInstructorId) {
+      toast({
+        title: 'Error',
+        description: 'Please select an instructor',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const response = await api.post(`/admin/students/${selectedStudentForInstructor}/instructor`, {
+        instructorId: selectedInstructorId,
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Success',
+          description: 'Instructor assigned successfully',
+        });
+        setShowInstructorDialog(false);
+        fetchStudentDetails(selectedStudentForInstructor);
+      } else {
+        const data = await response.json();
+        toast({
+          title: 'Error',
+          description: data.error || 'Failed to assign instructor',
+          variant: 'destructive',
+        });
       }
-    });
-    
-    return Math.round(totalProgress / student.purchasedCourses.length);
+    } catch (error) {
+      console.error('Error assigning instructor:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to assign instructor',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const openGrantCourseDialog = (studentId: string) => {
+    setSelectedStudentForInstructor(studentId);
+    setSelectedCourseId('');
+    setShowGrantCourseDialog(true);
+  };
+
+  const grantCourseAccess = async () => {
+    if (!selectedStudentForInstructor || !selectedCourseId) {
+      toast({
+        title: 'Error',
+        description: 'Please select a course',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const response = await api.post('/admin/enrollments', {
+        studentId: selectedStudentForInstructor,
+        courseId: selectedCourseId,
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Success',
+          description: 'Course access granted successfully',
+        });
+        setShowGrantCourseDialog(false);
+        fetchStudentDetails(selectedStudentForInstructor);
+        // Refresh students list
+        const studentsResponse = await api.get('/admin/students');
+        if (studentsResponse.ok) {
+          setStudents(await studentsResponse.json());
+        }
+      } else {
+        const data = await response.json();
+        toast({
+          title: 'Error',
+          description: data.error || 'Failed to grant course access',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error granting course access:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to grant course access',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const toggleBlockStatus = async (studentId: string) => {
+    const student = students.find(s => s.id === studentId);
+    const newBlockStatus = !student?.isBlocked;
+
+    try {
+      const response = await api.patch(`/admin/students/${studentId}/block`, {
+        isBlocked: newBlockStatus,
+      });
+
+      if (response.ok) {
+        setStudents(prev =>
+          prev.map(s =>
+            s.id === studentId ? { ...s, isBlocked: newBlockStatus } : s
+          )
+        );
+        toast({
+          title: newBlockStatus ? "Student Blocked" : "Student Unblocked",
+          description: `${student?.fullName || student?.email} has been ${newBlockStatus ? 'blocked' : 'unblocked'}.`
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'Failed to update student status',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error toggling block status:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update student status',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <div className="text-center py-12 text-muted-foreground">Loading students...</div>
+      </div>
+    );
+  }
+
+  const handleRegisterStudent = async () => {
+    if (!registerEmail.trim() || !registerPassword.trim() || !registerFullName.trim()) {
+      toast({ title: 'Error', description: 'Email, password and full name are required', variant: 'destructive' });
+      return;
+    }
+    setRegistering(true);
+    try {
+      const res = await api.post('/admin/students', {
+        email: registerEmail.trim(),
+        password: registerPassword,
+        fullName: registerFullName.trim(),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        toast({ title: 'Error', description: data.error || 'Failed to register', variant: 'destructive' });
+        return;
+      }
+      const data = await res.json();
+      const studentId = data.student?.id;
+      if (studentId && registerBatchIds.length > 0) {
+        for (const batchId of registerBatchIds) {
+          await api.post(`/admin/live-lecture-batches/${batchId}/students/${studentId}`);
+        }
+      }
+      toast({ title: 'Success', description: 'Student registered' + (registerBatchIds.length ? ' and added to selected batch(es)' : '') });
+      setShowRegisterDialog(false);
+      setRegisterEmail('');
+      setRegisterPassword('');
+      setRegisterFullName('');
+      setRegisterBatchIds([]);
+      const studentsResponse = await api.get('/admin/students');
+      if (studentsResponse.ok) setStudents(await studentsResponse.json());
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to register student', variant: 'destructive' });
+    } finally {
+      setRegistering(false);
+    }
   };
 
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-display font-bold text-foreground mb-2">Student Management</h1>
-        <p className="text-muted-foreground">View and manage enrolled students</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-display font-bold text-foreground mb-2">Student Management</h1>
+          <p className="text-muted-foreground">View and manage enrolled students. Register new students and add them to live-lecture batches.</p>
+        </div>
+        <Button onClick={() => setShowRegisterDialog(true)} className="gap-2">
+          <UserPlus className="w-4 h-4" /> Register New Student
+        </Button>
       </div>
 
       {/* Search */}
@@ -83,159 +414,410 @@ const AdminStudents: React.FC = () => {
 
       {/* Students Table */}
       <div className="bg-card rounded-xl border border-border shadow-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-muted/50">
-                <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Student</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Joined</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Courses</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Progress</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Status</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {filteredStudents.map((student) => {
-                const avgProgress = getStudentProgress(student);
-                
-                return (
-                  <tr key={student.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <span className="text-sm font-medium text-primary">
-                            {student.name.charAt(0)}
-                          </span>
+        {filteredStudents.length === 0 ? (
+          <div className="p-12 text-center text-muted-foreground">
+            {searchQuery ? 'No students found matching your search' : 'No students found'}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border bg-muted/50">
+                  <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Student</th>
+                  <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Joined</th>
+                  <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Courses</th>
+                  <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Certificates</th>
+                  <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Status</th>
+                  <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredStudents.map((student) => {
+                  return (
+                    <tr key={student.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-medium text-primary">
+                              {(student.fullName || student.email).charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="font-medium text-foreground">{student.fullName || 'No name'}</p>
+                            <p className="text-sm text-muted-foreground">{student.email}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-foreground">{student.name}</p>
-                          <p className="text-sm text-muted-foreground">{student.email}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm text-muted-foreground">
+                          {new Date(student.createdAt).toLocaleDateString('en-IN', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1.5">
+                          <BookOpen className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm text-foreground">{student.enrolledCourses}</span>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-sm text-muted-foreground">
-                        {new Date(student.joinedDate).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric'
-                        })}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-1.5">
-                        <BookOpen className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm text-foreground">{student.purchasedCourses.length}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3 min-w-[120px]">
-                        <Progress value={avgProgress} className="h-2 flex-1" />
-                        <span className="text-sm text-muted-foreground w-10">{avgProgress}%</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <Badge className={student.isBlocked 
-                        ? 'bg-destructive/10 text-destructive' 
-                        : 'bg-success/10 text-success'
-                      }>
-                        {student.isBlocked ? 'Blocked' : 'Active'}
-                      </Badge>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          onClick={() => setSelectedStudent(student)}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          className={student.isBlocked ? 'text-success' : 'text-destructive'}
-                          onClick={() => toggleBlockStatus(student.id)}
-                        >
-                          {student.isBlocked ? (
-                            <CheckCircle className="w-4 h-4" />
-                          ) : (
-                            <Ban className="w-4 h-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm text-foreground">{student.certificates}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <Badge className={student.isBlocked 
+                          ? 'bg-destructive/10 text-destructive' 
+                          : 'bg-success/10 text-success'
+                        }>
+                          {student.isBlocked ? 'Blocked' : 'Active'}
+                        </Badge>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => fetchStudentDetails(student.id)}
+                          >
+                            <Eye className="w-4 h-4 mr-1" />
+                            View Progress
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => openInstructorDialog(student.id)}
+                          >
+                            <UserCheck className="w-4 h-4 mr-1" />
+                            Assign Instructor
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => openGrantCourseDialog(student.id)}
+                          >
+                            <BookOpen className="w-4 h-4 mr-1" />
+                            Grant Course
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            className={student.isBlocked ? 'text-success' : 'text-destructive'}
+                            onClick={() => toggleBlockStatus(student.id)}
+                          >
+                            {student.isBlocked ? (
+                              <CheckCircle className="w-4 h-4" />
+                            ) : (
+                              <Ban className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Student Detail Dialog */}
       <Dialog open={!!selectedStudent} onOpenChange={() => setSelectedStudent(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Student Details</DialogTitle>
+            <DialogTitle>Student Progress Details</DialogTitle>
           </DialogHeader>
-          {selectedStudent && (
+          {loadingDetails ? (
+            <div className="py-8 text-center text-muted-foreground">Loading details...</div>
+          ) : selectedStudent ? (
             <div className="space-y-6 mt-4">
               {/* Student Info */}
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 p-4 bg-muted/30 rounded-xl">
                 <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center">
                   <span className="text-2xl font-bold text-primary">
-                    {selectedStudent.name.charAt(0)}
+                    {(selectedStudent.profile?.fullName || selectedStudent.email).charAt(0).toUpperCase()}
                   </span>
                 </div>
-                <div>
-                  <h3 className="text-xl font-semibold text-foreground">{selectedStudent.name}</h3>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
+                <div className="flex-1">
+                  <h3 className="text-xl font-semibold text-foreground">
+                    {selectedStudent.profile?.fullName || 'No name'}
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mt-1">
                     <span className="flex items-center gap-1">
                       <Mail className="w-4 h-4" />
                       {selectedStudent.email}
                     </span>
                     <span className="flex items-center gap-1">
                       <Calendar className="w-4 h-4" />
-                      Joined {new Date(selectedStudent.joinedDate).toLocaleDateString()}
+                      Joined {new Date(selectedStudent.createdAt).toLocaleDateString('en-IN')}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Purchased Courses */}
+              {/* Screen Time */}
+              <div className="p-4 bg-muted/30 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Clock className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Weekly Screen Time</p>
+                    <p className="text-xl font-bold text-foreground">
+                      {formatTime(selectedStudent.screenTime?.weeklySeconds || 0)}
+                    </p>
+                  </div>
+                  {selectedStudent.screenTime?.lastActive && (
+                    <div className="ml-auto text-right">
+                      <p className="text-sm text-muted-foreground">Last Active</p>
+                      <p className="text-sm font-medium text-foreground">
+                        {new Date(selectedStudent.screenTime.lastActive).toLocaleString('en-IN')}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Course Progress */}
               <div>
-                <h4 className="font-medium text-foreground mb-3">Purchased Courses</h4>
-                {selectedStudent.purchasedCourses.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">No courses purchased</p>
+                <h4 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                  <BookOpen className="w-5 h-5" />
+                  Course Progress
+                </h4>
+                {selectedStudent.enrollments.length === 0 ? (
+                  <p className="text-muted-foreground text-sm p-4 bg-muted/30 rounded-lg">
+                    No courses enrolled yet
+                  </p>
                 ) : (
-                  <div className="space-y-3">
-                    {selectedStudent.purchasedCourses.map(courseId => {
-                      const course = mockCourses.find(c => c.id === courseId);
-                      const progress = selectedStudent.progress[courseId];
-                      const progressPercent = course && progress 
-                        ? calculateCourseProgress(course, progress.completedVideos)
-                        : 0;
-                      
-                      return course ? (
-                        <div key={courseId} className="p-4 bg-muted/50 rounded-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="font-medium text-foreground">{course.title}</p>
-                            <span className="text-sm text-muted-foreground">{progressPercent}%</span>
+                  <div className="space-y-4">
+                    {selectedStudent.enrollments.map(enrollment => (
+                      <div key={enrollment.id} className="p-4 bg-muted/30 rounded-xl">
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <p className="font-medium text-foreground">{enrollment.course.title}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="outline" className="text-xs">
+                                {enrollment.course.category.replace('_', ' ')}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                {enrollment.course.level}
+                              </Badge>
+                            </div>
                           </div>
-                          <Progress value={progressPercent} className="h-2" />
-                          <p className="text-xs text-muted-foreground mt-2">
-                            {progress?.completedVideos.length || 0} videos completed
-                          </p>
+                          {enrollment.completedAt ? (
+                            <Badge className="bg-success/10 text-success">
+                              <Award className="w-3 h-3 mr-1" />
+                              Completed
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">In Progress</Badge>
+                          )}
                         </div>
-                      ) : null;
-                    })}
+                        
+                        {/* Progress Bar */}
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">
+                              {enrollment.progress.completedVideos} / {enrollment.progress.totalVideos} videos
+                            </span>
+                            <span className="font-medium text-foreground">
+                              {enrollment.progress.percent}%
+                            </span>
+                          </div>
+                          <Progress 
+                            value={enrollment.progress.percent} 
+                            className="h-2"
+                          />
+                        </div>
+
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Enrolled on {new Date(enrollment.enrolledAt).toLocaleDateString('en-IN', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </p>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
+
+              {/* Certificates */}
+              {selectedStudent.certificates.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                    <Award className="w-5 h-5" />
+                    Certificates Earned
+                  </h4>
+                  <div className="space-y-2">
+                    {selectedStudent.certificates.map(cert => (
+                      <div key={cert.id} className="p-3 bg-success/10 rounded-lg flex items-center gap-3">
+                        <Award className="w-5 h-5 text-success" />
+                        <div>
+                          <p className="font-medium text-foreground">{cert.course.title}</p>
+                          <p className="text-xs text-muted-foreground">Certificate of Completion</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Instructor Dialog */}
+      <Dialog open={showInstructorDialog} onOpenChange={setShowInstructorDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Instructor to Student</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Select Instructor</label>
+              <select
+                value={selectedInstructorId}
+                onChange={(e) => setSelectedInstructorId(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg border border-input bg-background"
+              >
+                <option value="">-- Select Instructor --</option>
+                {instructors.map(instructor => (
+                  <option key={instructor.id} value={instructor.id}>
+                    {instructor.fullName} ({instructor.email})
+                  </option>
+                ))}
+              </select>
+              {instructors.length === 0 && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  No instructors available. Create instructors first.
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => setShowInstructorDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={assignInstructor} disabled={!selectedInstructorId}>
+                <UserCheck className="w-4 h-4 mr-2" />
+                Assign Instructor
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Grant Course Access Dialog */}
+      <Dialog open={showGrantCourseDialog} onOpenChange={setShowGrantCourseDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Grant Course Access</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Select Course</label>
+              <select
+                value={selectedCourseId}
+                onChange={(e) => setSelectedCourseId(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg border border-input bg-background"
+              >
+                <option value="">-- Select Course --</option>
+                {courses.map(course => (
+                  <option key={course.id} value={course.id}>
+                    {course.title}
+                  </option>
+                ))}
+              </select>
+              {courses.length === 0 && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  No courses available. Create courses first.
+                </p>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              This will enroll the student in the selected course for free.
+            </p>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => setShowGrantCourseDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={grantCourseAccess} disabled={!selectedCourseId}>
+                <BookOpen className="w-4 h-4 mr-2" />
+                Grant Access
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Register New Student Dialog */}
+      <Dialog open={showRegisterDialog} onOpenChange={setShowRegisterDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Register New Student</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Email *</label>
+              <input
+                type="email"
+                className="w-full px-4 py-2 rounded-lg border border-input bg-background"
+                value={registerEmail}
+                onChange={(e) => setRegisterEmail(e.target.value)}
+                placeholder="student@example.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Password *</label>
+              <input
+                type="password"
+                className="w-full px-4 py-2 rounded-lg border border-input bg-background"
+                value={registerPassword}
+                onChange={(e) => setRegisterPassword(e.target.value)}
+                placeholder="••••••••"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Full name *</label>
+              <input
+                type="text"
+                className="w-full px-4 py-2 rounded-lg border border-input bg-background"
+                value={registerFullName}
+                onChange={(e) => setRegisterFullName(e.target.value)}
+                placeholder="Student name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Add to live-lecture batch(es)</label>
+              <p className="text-xs text-muted-foreground mb-2">Select batches (e.g. Regular Batch) so this student gets the join link 10 min before each lecture.</p>
+              <div className="space-y-2 max-h-32 overflow-y-auto border rounded-lg p-2">
+                {batches.map((b) => (
+                  <label key={b.id} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={registerBatchIds.includes(b.id)}
+                      onChange={(e) =>
+                        setRegisterBatchIds((prev) =>
+                          e.target.checked ? [...prev, b.id] : prev.filter((id) => id !== b.id)
+                        )
+                      }
+                    />
+                    <span className="text-sm">{b.name}</span>
+                  </label>
+                ))}
+                {batches.length === 0 && <p className="text-sm text-muted-foreground">No batches. Create batches in Live Lectures.</p>}
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => setShowRegisterDialog(false)}>Cancel</Button>
+              <Button onClick={handleRegisterStudent} disabled={registering}>
+                {registering ? 'Registering…' : 'Register & add to batch(es)'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

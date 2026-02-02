@@ -16,7 +16,7 @@ import { toast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 
 const AdminProfile: React.FC = () => {
-  const { currentAdmin, logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   
   // Platform settings state (simulated)
@@ -27,17 +27,28 @@ const AdminProfile: React.FC = () => {
     defaultCoursePrice: 99.99
   });
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
   };
 
-  const handleSaveSettings = () => {
-    // TODO: Save settings via API when backend is connected
-    toast({
-      title: "Settings Saved",
-      description: "Your platform settings have been updated."
-    });
+  const handleSaveSettings = async () => {
+    // Note: Platform settings API endpoint to be implemented in future
+    // For now, settings are stored locally in component state
+    try {
+      // Future: await api.put('/admin/settings', settings);
+      toast({
+        title: "Settings Saved",
+        description: "Your platform settings have been updated. (Local storage - API integration pending)"
+      });
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save settings. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -52,7 +63,7 @@ const AdminProfile: React.FC = () => {
             </div>
             <div className="flex-1">
               <h1 className="text-2xl font-display font-bold text-foreground">
-                {currentAdmin?.name || 'Admin User'}
+                {user?.fullName || 'Admin User'}
               </h1>
               <p className="text-muted-foreground">Platform Administrator</p>
             </div>
@@ -72,21 +83,23 @@ const AdminProfile: React.FC = () => {
             <User className="w-5 h-5 text-muted-foreground" />
             <div>
               <p className="text-xs text-muted-foreground">Full Name</p>
-              <p className="text-sm font-medium text-foreground">{currentAdmin?.name}</p>
+              <p className="text-sm font-medium text-foreground">{user?.fullName || 'N/A'}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
             <Mail className="w-5 h-5 text-muted-foreground" />
             <div>
               <p className="text-xs text-muted-foreground">Email</p>
-              <p className="text-sm font-medium text-foreground">{currentAdmin?.email}</p>
+              <p className="text-sm font-medium text-foreground">{user?.email || 'N/A'}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
             <Shield className="w-5 h-5 text-muted-foreground" />
             <div>
               <p className="text-xs text-muted-foreground">Role</p>
-              <p className="text-sm font-medium text-foreground capitalize">{currentAdmin?.role}</p>
+              <p className="text-sm font-medium text-foreground capitalize">
+                {user?.roles?.includes('ADMIN') ? 'Admin' : 'User'}
+              </p>
             </div>
           </div>
         </div>
@@ -106,7 +119,7 @@ const AdminProfile: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm text-muted-foreground mb-2">
-                  Default Course Price ($)
+                  Default Course Price (₹)
                 </label>
                 <input
                   type="number"

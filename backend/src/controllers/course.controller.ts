@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, UserRole } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -12,7 +12,7 @@ export class CourseController {
     try {
       const { category, level, search } = req.query;
 
-      const where: any = { isVisible: true };
+      const where: Record<string, unknown> = { isVisible: true };
 
       if (category) {
         where.category = category;
@@ -32,9 +32,7 @@ export class CourseController {
       const courses = await prisma.course.findMany({
         where,
         include: {
-          modules: {
-            select: { id: true },
-          },
+          videos: { select: { id: true } },
           _count: {
             select: { enrollments: true },
           },
@@ -63,7 +61,7 @@ export class CourseController {
         price: course.price,
         thumbnailUrl: course.thumbnailUrl,
         durationHours: course.durationHours,
-        moduleCount: course.modules.length,
+        videoCount: course.videos.length,
         studentCount: course._count.enrollments,
         isEnrolled: enrolledCourseIds.includes(course.id),
       }));
@@ -86,19 +84,14 @@ export class CourseController {
       const course = await prisma.course.findUnique({
         where: { id },
         include: {
-          modules: {
-            include: {
-              videos: {
-                select: {
-                  id: true,
-                  title: true,
-                  durationMinutes: true,
-                  sortOrder: true,
-                },
-                orderBy: { sortOrder: 'asc' },
-              },
+          videos: {
+            select: {
+              id: true,
+              title: true,
+              durationMinutes: true,
+              sortOrder: true,
             },
-            orderBy: { sortOrder: 'asc' },
+            orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
           },
           _count: {
             select: { enrollments: true },
@@ -111,7 +104,7 @@ export class CourseController {
         return;
       }
 
-      if (!course.isVisible && !req.user?.roles.includes('ADMIN')) {
+      if (!course.isVisible && !req.user?.roles.includes(UserRole.ADMIN)) {
         res.status(404).json({ error: 'Course not found' });
         return;
       }
@@ -132,6 +125,7 @@ export class CourseController {
 
       res.json({
         ...course,
+        modules: [{ id: 'course', title: 'Content', videos: course.videos }],
         studentCount: course._count.enrollments,
         isEnrolled,
       });
@@ -189,7 +183,7 @@ export class CourseController {
       });
 
       // Allow admins to access without enrollment
-      if (!enrollment && !req.user?.roles.includes('ADMIN')) {
+      if (!enrollment && !req.user?.roles.includes(UserRole.ADMIN)) {
         res.status(403).json({ error: 'You must be enrolled in this course' });
         return;
       }
@@ -197,13 +191,18 @@ export class CourseController {
       const course = await prisma.course.findUnique({
         where: { id },
         include: {
-          modules: {
+          videos: {
             include: {
-              videos: {
-                orderBy: { sortOrder: 'asc' },
+              assignments: {
+                select: {
+                  id: true,
+                  title: true,
+                  description: true,
+                  instructions: true,
+                },
               },
             },
-            orderBy: { sortOrder: 'asc' },
+            orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
           },
         },
       });
@@ -213,31 +212,42 @@ export class CourseController {
         return;
       }
 
-      // Get user's progress for this course
+      // Get user's progress for this course (videos by courseId)
       const progress = await prisma.videoProgress.findMany({
         where: {
           userId,
-          video: {
-            module: { courseId: id },
-          },
+          video: { courseId: id },
         },
       });
 
       const progressMap = new Map(progress.map(p => [p.videoId, p]));
 
-      // Add progress to each video
-      const modulesWithProgress = course.modules.map(module => ({
-        ...module,
-        videos: module.videos.map(video => ({
-          ...video,
-          isCompleted: progressMap.get(video.id)?.isCompleted || false,
-          watchTimeSeconds: progressMap.get(video.id)?.watchTimeSeconds || 0,
-        })),
-      }));
+      // Generate signed URLs for S3 videos
+      const { s3Service } = await import('../services/s3.service');
+
+      const videosWithProgress = await Promise.all(
+        course.videos.map(async video => {
+          let signedUrl = video.videoUrl;
+          if (video.videoUrl && !video.videoUrl.startsWith('http')) {
+            try {
+              signedUrl = await s3Service.getDownloadUrl(video.videoUrl, 7200);
+            } catch (err) {
+              console.error('Failed to generate signed URL for video:', video.id, err);
+              signedUrl = null;
+            }
+          }
+          return {
+            ...video,
+            videoUrl: signedUrl,
+            isCompleted: progressMap.get(video.id)?.isCompleted || false,
+            watchTimeSeconds: progressMap.get(video.id)?.watchTimeSeconds || 0,
+          };
+        })
+      );
 
       res.json({
         ...course,
-        modules: modulesWithProgress,
+        modules: [{ id: 'course', title: 'Content', videos: videosWithProgress }],
       });
     } catch (error) {
       console.error('Get course content error:', error);

@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockCourses, calculateCourseProgress } from '@/data/mockData';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Link } from 'react-router-dom';
 import { 
   User, 
   Mail, 
@@ -14,18 +14,52 @@ import {
   Download
 } from 'lucide-react';
 
+type Enrollment = {
+  id: string;
+  enrolledAt: string;
+  completedAt: string | null;
+  course: {
+    id: string;
+    title: string;
+    category: string;
+    level: string;
+    thumbnailUrl: string | null;
+    durationHours: number;
+  };
+  progress: number;
+  totalVideos: number;
+  completedVideos: number;
+};
+
 const StudentProfile: React.FC = () => {
-  const { currentStudent } = useAuth();
+  const { user, isAuthenticated } = useAuth();
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // TODO: Fetch student profile from API when backend is connected
-  const purchasedCourses = mockCourses.filter(
-    course => currentStudent?.purchasedCourses.includes(course.id)
-  );
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
 
-  const completedCourses = purchasedCourses.filter(course => {
-    const progress = currentStudent?.progress[course.id];
-    return progress && calculateCourseProgress(course, progress.completedVideos) === 100;
-  });
+    const fetchEnrollments = async () => {
+      try {
+        const response = await api.get('/enrollments');
+        if (response.ok) {
+          const data = await response.json();
+          setEnrollments(data);
+        }
+      } catch (error) {
+        console.error('Error fetching enrollments:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEnrollments();
+  }, [isAuthenticated]);
+
+  const completedCourses = enrollments.filter(e => e.completedAt !== null || e.progress === 100);
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
@@ -36,12 +70,12 @@ const StudentProfile: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-end gap-4 -mt-12">
             <div className="w-24 h-24 rounded-xl bg-card border-4 border-card flex items-center justify-center shadow-lg">
               <span className="text-3xl font-bold text-primary">
-                {currentStudent?.name.charAt(0) || 'S'}
+                {user?.fullName?.charAt(0) || user?.email?.charAt(0).toUpperCase() || 'S'}
               </span>
             </div>
             <div className="flex-1">
               <h1 className="text-2xl font-display font-bold text-foreground">
-                {currentStudent?.name || 'Student Name'}
+                {user?.fullName || 'Student Name'}
               </h1>
               <p className="text-muted-foreground">Data Enthusiast</p>
             </div>
@@ -62,7 +96,7 @@ const StudentProfile: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Enrolled</p>
-              <p className="text-2xl font-bold text-foreground">{purchasedCourses.length}</p>
+              <p className="text-2xl font-bold text-foreground">{enrollments.length}</p>
             </div>
           </div>
         </div>
@@ -100,14 +134,14 @@ const StudentProfile: React.FC = () => {
             <User className="w-5 h-5 text-muted-foreground" />
             <div>
               <p className="text-xs text-muted-foreground">Full Name</p>
-              <p className="text-sm font-medium text-foreground">{currentStudent?.name}</p>
+              <p className="text-sm font-medium text-foreground">{user?.fullName || 'N/A'}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
             <Mail className="w-5 h-5 text-muted-foreground" />
             <div>
               <p className="text-xs text-muted-foreground">Email</p>
-              <p className="text-sm font-medium text-foreground">{currentStudent?.email}</p>
+              <p className="text-sm font-medium text-foreground">{user?.email || 'N/A'}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
@@ -115,8 +149,8 @@ const StudentProfile: React.FC = () => {
             <div>
               <p className="text-xs text-muted-foreground">Joined</p>
               <p className="text-sm font-medium text-foreground">
-                {currentStudent?.joinedDate 
-                  ? new Date(currentStudent.joinedDate).toLocaleDateString('en-US', { 
+                {user?.createdAt 
+                  ? new Date(user.createdAt).toLocaleDateString('en-US', { 
                       month: 'long', 
                       year: 'numeric' 
                     })
@@ -140,9 +174,9 @@ const StudentProfile: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-3">
-            {completedCourses.map(course => (
+            {completedCourses.map(enrollment => (
               <div 
-                key={course.id}
+                key={enrollment.id}
                 className="flex items-center justify-between p-4 bg-muted/50 rounded-lg"
               >
                 <div className="flex items-center gap-3">
@@ -150,7 +184,7 @@ const StudentProfile: React.FC = () => {
                     <Award className="w-5 h-5 text-accent-foreground" />
                   </div>
                   <div>
-                    <p className="font-medium text-foreground">{course.title}</p>
+                    <p className="font-medium text-foreground">{enrollment.course.title}</p>
                     <p className="text-sm text-muted-foreground">Certificate of Completion</p>
                   </div>
                 </div>

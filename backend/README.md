@@ -1,6 +1,6 @@
-# LearnHub Backend API
+# DataUniverse Backend API
 
-Node.js + Express + Prisma + MySQL backend for the LearnHub e-learning platform.
+Node.js + Express + Prisma + MySQL backend for the DataUniverse e-learning platform.
 
 ## 🚀 Quick Start
 
@@ -122,8 +122,8 @@ backend/
 ## 🧪 Test Accounts
 
 After seeding:
-- **Admin**: admin@learnhub.com / admin123
-- **Student**: student@learnhub.com / student123
+- **Admin**: admin@datauniverse.com / Admin123!
+- **Student**: student@datauniverse.com / Student123!
 
 ## 🚢 Deployment
 

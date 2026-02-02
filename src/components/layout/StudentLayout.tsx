@@ -1,15 +1,19 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useScreenTime } from '@/hooks/useScreenTime';
 import { 
   GraduationCap, 
   LayoutDashboard, 
   ShoppingBag, 
   BookOpen, 
-  User,
   LogOut,
-  Search,
-  Bell
+  FileText,
+  Calendar,
+  Radio,
+  Shield,
+  User,
+  Video
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -19,19 +23,27 @@ interface StudentLayoutProps {
 }
 
 const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
-  const { currentStudent, logout } = useAuth();
+  const { user, logout } = useAuth();
+  
+  // Track screen time for students
+  useScreenTime();
   const location = useLocation();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const handleLogout = async () => {
+    await logout();
+    // Use replace to prevent back navigation
+    navigate('/login', { replace: true });
   };
 
   const navItems = [
     { path: '/student/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/student/marketplace', label: 'Courses', icon: ShoppingBag },
     { path: '/student/my-courses', label: 'My Learning', icon: BookOpen },
+    { path: '/student/live-lectures', label: 'Live Lectures', icon: Radio },
+    { path: '/student/submissions', label: 'Submissions', icon: FileText },
+    { path: '/student/interviews', label: 'Interviews', icon: Calendar },
+    { path: '/student/alumni', label: 'Alumni', icon: Video },
     { path: '/student/profile', label: 'Profile', icon: User },
   ];
 
@@ -40,55 +52,64 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
   return (
     <div className="min-h-screen bg-background">
       {/* Top Navigation */}
-      <header className="sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+        <div className="container mx-auto px-4 h-14 flex items-center justify-between">
           {/* Logo */}
-          <Link to="/student/dashboard" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 gradient-primary rounded-lg flex items-center justify-center">
-              <GraduationCap className="w-5 h-5 text-primary-foreground" />
+          <Link to="/student/dashboard" className="flex items-center gap-2 group">
+            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+              <GraduationCap className="w-4 h-4 text-primary-foreground" />
             </div>
-            <span className="text-xl font-display font-bold text-foreground hidden sm:block">LearnHub</span>
+            <span className="text-lg font-display font-bold text-foreground hidden sm:block">DataUniverse</span>
           </Link>
 
           {/* Center Navigation */}
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden md:flex items-center gap-0.5">
             {navItems.map((item) => (
               <Link
                 key={item.path}
                 to={item.path}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                  "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all",
                   isActive(item.path)
                     ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 )}
               >
                 <item.icon className="w-4 h-4" />
-                {item.label}
+                <span className="hidden lg:inline">{item.label}</span>
               </Link>
             ))}
           </nav>
 
           {/* Right Section */}
-          <div className="flex items-center gap-3">
-            <button className="p-2 rounded-lg hover:bg-muted transition-colors">
-              <Search className="w-5 h-5 text-muted-foreground" />
-            </button>
-            <button className="p-2 rounded-lg hover:bg-muted transition-colors relative">
-              <Bell className="w-5 h-5 text-muted-foreground" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-accent rounded-full" />
-            </button>
-            <div className="w-px h-6 bg-border hidden sm:block" />
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center">
-                <span className="text-sm font-medium text-secondary-foreground">
-                  {currentStudent?.name.charAt(0) || 'S'}
+          <div className="flex items-center gap-1">
+            <Link
+              to="/student/policies"
+              className="p-2 rounded-lg hover:bg-muted transition-colors"
+              title="Policies"
+            >
+              <Shield className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors" />
+            </Link>
+            <Link
+              to="/student/profile"
+              className="p-2 rounded-lg hover:bg-muted transition-colors"
+              title="Profile"
+            >
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center ring-2 ring-primary/20 hover:ring-primary/40 transition-all">
+                <span className="text-sm font-semibold text-primary">
+                  {user?.fullName?.charAt(0) || user?.email?.charAt(0).toUpperCase() || 'S'}
                 </span>
               </div>
-              <Button variant="ghost" size="icon" onClick={handleLogout}>
-                <LogOut className="w-4 h-4" />
-              </Button>
-            </div>
+            </Link>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleLogout}
+              className="hover:bg-destructive/10 hover:text-destructive transition-colors"
+              title="Logout"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
         </div>
       </header>
@@ -115,7 +136,7 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
       </nav>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-6 pb-24 md:pb-6">
+      <main className="container mx-auto px-4 py-6 pb-20 md:pb-6">
         {children}
       </main>
     </div>

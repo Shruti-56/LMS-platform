@@ -9,6 +9,11 @@ const authController = new AuthController();
 router.post('/register', authController.register);
 router.post('/login', authController.login);
 
+// Password reset routes (public)
+router.post('/forgot-password', authController.forgotPassword);
+router.post('/reset-password', authController.resetPassword);
+router.get('/verify-reset-token/:token', authController.verifyResetToken);
+
 // Protected routes
 router.get('/me', authenticate, authController.getCurrentUser);
 router.post('/logout', authenticate, authController.logout);
