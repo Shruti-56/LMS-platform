@@ -13,10 +13,13 @@ import {
   Radio,
   Shield,
   User,
-  Video
+  Video,
+  MessageSquare,
+  Award
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import InstituteFooter from '@/components/InstituteFooter';
 
 interface StudentLayoutProps {
   children: React.ReactNode;
@@ -44,13 +47,15 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
     { path: '/student/submissions', label: 'Submissions', icon: FileText },
     { path: '/student/interviews', label: 'Interviews', icon: Calendar },
     { path: '/student/alumni', label: 'Alumni', icon: Video },
+    { path: '/student/feedback', label: 'Feedback', icon: MessageSquare },
+    { path: '/student/certificates', label: 'Certificates', icon: Award },
     { path: '/student/profile', label: 'Profile', icon: User },
   ];
 
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Top Navigation */}
       <header className="sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
         <div className="container mx-auto px-4 h-14 flex items-center justify-between">
@@ -136,9 +141,12 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
       </nav>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-6 pb-20 md:pb-6">
+      <main className="flex-1 container mx-auto px-4 py-6 pb-20 md:pb-6">
         {children}
       </main>
+
+      {/* Institute details – at bottom of page, visible when students scroll down */}
+      <InstituteFooter />
     </div>
   );
 };

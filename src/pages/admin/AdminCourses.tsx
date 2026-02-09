@@ -371,8 +371,8 @@ const AdminCourses: React.FC = () => {
         />
       </div>
 
-      {/* Courses Table */}
-      <div className="bg-card rounded-xl border border-border shadow-card overflow-hidden">
+      {/* Courses Table - relative z-0 so it doesn't overlap sidebar when scrolling */}
+      <div className="bg-card rounded-xl border border-border shadow-card overflow-hidden relative z-0">
         {filteredCourses.length === 0 ? (
           <div className="p-12 text-center text-muted-foreground">
             {searchQuery ? 'No courses found matching your search' : 'No courses yet. Create your first course!'}

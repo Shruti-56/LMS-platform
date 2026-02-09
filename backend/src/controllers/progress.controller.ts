@@ -150,31 +150,41 @@ export class ProgressController {
         },
       });
 
-      // If all videos complete, update enrollment and create certificate
+      // If all videos complete (and course has at least one video), update enrollment and create certificate request
       let courseJustCompleted = false;
-      if (completedVideos === totalVideos) {
+      if (totalVideos > 0 && completedVideos === totalVideos) {
         // Check if not already completed
         if (!enrollment.completedAt) {
           courseJustCompleted = true;
-          
-          await prisma.$transaction([
-            prisma.enrollment.update({
-              where: {
-                userId_courseId: { userId, courseId },
-              },
-              data: { completedAt: new Date() },
-            }),
-            prisma.certificate.upsert({
-              where: {
-                userId_courseId: { userId, courseId },
-              },
-              update: {},
-              create: {
-                userId,
-                courseId,
-              },
-            }),
-          ]);
+          await prisma.enrollment.update({
+            where: {
+              userId_courseId: { userId, courseId },
+            },
+            data: { completedAt: new Date() },
+          });
+
+          // Create certificate record for admin approval (if not already exists)
+          const existingCert = await prisma.courseCertificate.findUnique({
+            where: { userId_courseId: { userId, courseId } },
+          });
+          if (!existingCert) {
+            try {
+              const year = new Date().getFullYear();
+              const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+              const certificateNumber = `CERT-${year}-${suffix}`;
+              await prisma.courseCertificate.create({
+                data: {
+                  userId,
+                  courseId,
+                  status: 'PENDING_APPROVAL',
+                  certificateNumber,
+                },
+              });
+            } catch (certError) {
+              console.error('Certificate creation failed (course completed):', certError);
+              // Don't fail the request - enrollment is already updated; admin can backfill or retry
+            }
+          }
 
           // Send course completion email
           const user = await prisma.user.findUnique({

@@ -28,16 +28,6 @@ export class UserController {
               },
             },
           },
-          certificates: {
-            include: {
-              course: {
-                select: {
-                  id: true,
-                  title: true,
-                },
-              },
-            },
-          },
         },
       });
 
@@ -54,12 +44,6 @@ export class UserController {
         createdAt: user.createdAt,
         profile: user.profile,
         enrolledCourses: user.enrollments.map(e => e.course),
-        certificates: user.certificates.map(c => ({
-          id: c.id,
-          course: c.course,
-          issuedAt: c.issuedAt,
-          certificateUrl: c.certificateUrl,
-        })),
       });
     } catch (error) {
       console.error('Get profile error:', error);
@@ -95,37 +79,6 @@ export class UserController {
     } catch (error) {
       console.error('Update profile error:', error);
       res.status(500).json({ error: 'Failed to update profile' });
-    }
-  };
-
-  /**
-   * GET /api/users/certificates
-   * Get current user's certificates
-   */
-  getCertificates = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const userId = req.user!.id;
-
-      const certificates = await prisma.certificate.findMany({
-        where: { userId },
-        include: {
-          course: {
-            select: {
-              id: true,
-              title: true,
-              category: true,
-              level: true,
-              thumbnailUrl: true,
-            },
-          },
-        },
-        orderBy: { issuedAt: 'desc' },
-      });
-
-      res.json(certificates);
-    } catch (error) {
-      console.error('Get certificates error:', error);
-      res.status(500).json({ error: 'Failed to fetch certificates' });
     }
   };
 

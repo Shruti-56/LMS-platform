@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
-import { Clock, User, Calendar, TrendingUp, Eye, RefreshCw } from 'lucide-react';
+import { Clock, User, Calendar, TrendingUp, Eye, RefreshCw, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -14,7 +14,8 @@ type StudentScreenTime = {
   userId: string;
   email: string;
   fullName: string;
-  todaySeconds: number;
+  enrolledAt: string;
+  overallSeconds: number;
   weeklySeconds: number;
   lastActive: string | null;
 };
@@ -111,6 +112,24 @@ const AdminScreenTime: React.FC = () => {
     fetchScreenTime();
   }, []);
 
+  const downloadExcel = async () => {
+    try {
+      const res = await api.get('/admin/screentime/export');
+      if (!res.ok) throw new Error('Export failed');
+      const csv = await res.text();
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `screen-time-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: 'Downloaded', description: 'Screen time exported. Open in Excel or Sheets.' });
+    } catch (e) {
+      toast({ title: 'Export failed', description: 'Could not download screen time. Try again.', variant: 'destructive' });
+    }
+  };
+
   const viewStudentDetail = async (userId: string) => {
     setDetailLoading(true);
     setDialogOpen(true);
@@ -140,11 +159,9 @@ const AdminScreenTime: React.FC = () => {
     }
   };
 
-  // Calculate stats
   const totalStudents = screenTimeData.length;
-  const activeToday = screenTimeData.filter(s => s.todaySeconds > 0).length;
-  const totalTimeToday = screenTimeData.reduce((sum, s) => sum + (s.todaySeconds || 0), 0);
-  const totalTimeWeekly = screenTimeData.reduce((sum, s) => sum + (s.weeklySeconds || 0), 0);
+  const totalTimeOverall = screenTimeData.reduce((sum, s) => sum + (s.overallSeconds ?? 0), 0);
+  const totalTimeWeekly = screenTimeData.reduce((sum, s) => sum + (s.weeklySeconds ?? 0), 0);
 
   if (loading) {
     return (
@@ -176,39 +193,45 @@ const AdminScreenTime: React.FC = () => {
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-display font-bold text-foreground mb-2">Screen Time Analytics</h1>
-          <p className="text-muted-foreground">Monitor how much time students spend on the platform</p>
+          <p className="text-muted-foreground">Overall since enrollment and this week. Export to Excel.</p>
         </div>
-        <Button onClick={fetchScreenTime} variant="outline" size="sm">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={downloadExcel} variant="outline" size="sm" className="gap-2">
+            <Download className="w-4 h-4" />
+            Download Excel
+          </Button>
+          <Button onClick={fetchScreenTime} variant="outline" size="sm">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-card rounded-xl border border-border p-5 shadow-card">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
               <User className="w-5 h-5 text-primary" />
             </div>
-            <span className="text-sm font-medium text-muted-foreground">Active Today</span>
+            <span className="text-sm font-medium text-muted-foreground">Students</span>
           </div>
-          <p className="text-2xl font-bold text-foreground">{activeToday}</p>
-          <p className="text-xs text-muted-foreground">out of {totalStudents} students</p>
+          <p className="text-2xl font-bold text-foreground">{totalStudents}</p>
+          <p className="text-xs text-muted-foreground">total students</p>
         </div>
 
         <div className="bg-card rounded-xl border border-border p-5 shadow-card">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
-              <Clock className="w-5 h-5 text-success" />
+              <TrendingUp className="w-5 h-5 text-success" />
             </div>
-            <span className="text-sm font-medium text-muted-foreground">Today's Total</span>
+            <span className="text-sm font-medium text-muted-foreground">Overall (since enrollment)</span>
           </div>
-          <p className="text-2xl font-bold text-foreground">{formatTime(totalTimeToday)}</p>
-          <p className="text-xs text-muted-foreground">combined screen time</p>
+          <p className="text-2xl font-bold text-foreground">{formatTime(totalTimeOverall)}</p>
+          <p className="text-xs text-muted-foreground">combined all-time</p>
         </div>
 
         <div className="bg-card rounded-xl border border-border p-5 shadow-card">
@@ -219,20 +242,7 @@ const AdminScreenTime: React.FC = () => {
             <span className="text-sm font-medium text-muted-foreground">This Week</span>
           </div>
           <p className="text-2xl font-bold text-foreground">{formatTime(totalTimeWeekly)}</p>
-          <p className="text-xs text-muted-foreground">total platform usage</p>
-        </div>
-
-        <div className="bg-card rounded-xl border border-border p-5 shadow-card">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-warning" />
-            </div>
-            <span className="text-sm font-medium text-muted-foreground">Avg per Student</span>
-          </div>
-          <p className="text-2xl font-bold text-foreground">
-            {totalStudents > 0 ? formatTime(Math.round(totalTimeWeekly / totalStudents)) : '0s'}
-          </p>
-          <p className="text-xs text-muted-foreground">weekly average</p>
+          <p className="text-xs text-muted-foreground">last 7 days</p>
         </div>
       </div>
 
@@ -241,7 +251,7 @@ const AdminScreenTime: React.FC = () => {
         <div className="p-4 border-b border-border">
           <h2 className="text-lg font-semibold">Student Screen Time</h2>
           <p className="text-sm text-muted-foreground">
-            Screen time is tracked when students are active on the platform
+            Overall since first enrollment and this week (last 7 days). Screen time is tracked when students are active.
           </p>
         </div>
         
@@ -259,7 +269,8 @@ const AdminScreenTime: React.FC = () => {
               <thead>
                 <tr className="border-b border-border bg-muted/50">
                   <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Student</th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Today</th>
+                  <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Enrolled</th>
+                  <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Overall</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">This Week</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Last Active</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Actions</th>
@@ -281,10 +292,11 @@ const AdminScreenTime: React.FC = () => {
                         </div>
                       </div>
                     </td>
+                    <td className="px-6 py-4 text-sm text-muted-foreground">
+                      {student.enrolledAt ? formatDate(student.enrolledAt) : '—'}
+                    </td>
                     <td className="px-6 py-4">
-                      <span className={student.todaySeconds > 0 ? 'text-success font-medium' : 'text-muted-foreground'}>
-                        {formatTime(student.todaySeconds)}
-                      </span>
+                      <span className="font-medium">{formatTime(student.overallSeconds ?? 0)}</span>
                     </td>
                     <td className="px-6 py-4">
                       <span className="font-medium">{formatTime(student.weeklySeconds)}</span>

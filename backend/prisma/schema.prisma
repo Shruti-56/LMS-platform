@@ -59,6 +59,12 @@ enum InterviewStatus {
   MISSED
 }
 
+enum CertificateStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
 // ============================================
 // MODELS
 // ============================================
@@ -75,7 +81,6 @@ model User {
   enrollments    Enrollment[]
   purchases      Purchase[]
   videoProgress  VideoProgress[]
-  certificates   Certificate[]
   coursesCreated Course[] @relation("CourseCreator")
   screenTime     ScreenTime[]
   passwordResets PasswordReset[]
@@ -101,9 +106,13 @@ model User {
   feesPayments FeesPayment[]
 
   // Notices (admin creates; shown on student dashboard)
-  noticesCreated StudentNotice[] @relation("NoticeCreator")
-  noticesForMe   StudentNotice[] @relation("NoticeRecipient")
-  noticeAcks     StudentNoticeAck[]
+  noticesCreated     StudentNotice[] @relation("NoticeCreator")
+  noticesForMe       StudentNotice[] @relation("NoticeRecipient")
+  noticeRecipients   StudentNoticeRecipient[]
+  noticeAcks         StudentNoticeAck[]
+  studentFeedback   StudentFeedback[]
+  certificates      CourseCertificate[] @relation("CertificateRecipient")
+  certificatesApproved CourseCertificate[] @relation("CertificateApprover")
 
   @@map("users")
 }
@@ -113,6 +122,8 @@ model Profile {
   id              String    @id @default(uuid())
   userId          String    @unique @map("user_id")
   fullName        String    @map("full_name")
+  firstName       String?   @map("first_name")
+  lastName        String?   @map("last_name")
   avatarUrl       String?   @map("avatar_url")
   bio             String?   @db.Text
   isBlocked       Boolean   @default(false) @map("is_blocked")
@@ -144,7 +155,7 @@ model Course {
   videos       Video[]      // Videos directly on course (no module)
   enrollments  Enrollment[]
   purchases    Purchase[]
-  certificates Certificate[]
+  certificates CourseCertificate[]
 
   @@map("courses")
 }
@@ -201,6 +212,25 @@ model Enrollment {
   @@map("enrollments")
 }
 
+model CourseCertificate {
+  id                String            @id @default(uuid())
+  userId             String            @map("user_id")
+  courseId          String            @map("course_id")
+  status            CertificateStatus  @default(PENDING_APPROVAL)
+  certificateNumber String            @unique @map("certificate_number") // e.g. CERT-2026-00001
+  approvedAt        DateTime?         @map("approved_at")
+  approvedById      String?           @map("approved_by")
+  rejectedAt        DateTime?         @map("rejected_at")
+  createdAt         DateTime          @default(now()) @map("created_at")
+
+  user      User   @relation("CertificateRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  course    Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  approvedBy User? @relation("CertificateApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, courseId])
+  @@map("course_certificates")
+}
+
 model Purchase {
   id              String         @id @default(uuid())
   userId          String         @map("user_id")
@@ -231,20 +261,6 @@ model VideoProgress {
 
   @@unique([userId, videoId])
   @@map("video_progress")
-}
-
-model Certificate {
-  id             String   @id @default(uuid())
-  userId         String   @map("user_id")
-  courseId       String   @map("course_id")
-  certificateUrl String?  @map("certificate_url")
-  issuedAt       DateTime @default(now()) @map("issued_at")
-
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, courseId])
-  @@map("certificates")
 }
 
 // Screen time tracking for students
@@ -570,16 +586,30 @@ model StudentNotice {
   id        String    @id @default(uuid())
   title     String    @db.VarChar(500)
   body      String    @db.Text
-  studentId String?   @map("student_id") // null = all students; set = only this student
+  studentId String?   @map("student_id") // legacy: single student; null when using recipients
   createdBy String    @map("created_by") // admin user id
   createdAt DateTime @default(now()) @map("created_at")
   expiresAt DateTime? @map("expires_at") // optional: hide after this date
 
-  creator User  @relation("NoticeCreator", fields: [createdBy], references: [id], onDelete: Cascade)
-  student User? @relation("NoticeRecipient", fields: [studentId], references: [id], onDelete: Cascade)
-  acks    StudentNoticeAck[]
+  creator    User   @relation("NoticeCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  student    User?  @relation("NoticeRecipient", fields: [studentId], references: [id], onDelete: Cascade)
+  recipients StudentNoticeRecipient[] // when empty = all students; when non-empty = only these students
+  acks       StudentNoticeAck[]
 
   @@map("student_notices")
+}
+
+// Many-to-many: notice targeted to specific students (and/or students from selected batches)
+model StudentNoticeRecipient {
+  id       String @id @default(uuid())
+  noticeId String @map("notice_id")
+  studentId String @map("student_id")
+
+  notice  StudentNotice @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+  student User           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([noticeId, studentId])
+  @@map("student_notice_recipients")
 }
 
 // Student acknowledged a notice: dismissed (close) or remind later
@@ -596,6 +626,20 @@ model StudentNoticeAck {
 
   @@unique([noticeId, studentId])
   @@map("student_notice_acks")
+}
+
+// Student feedback to institute (platform, courses, experience)
+model StudentFeedback {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  category  String?  @db.VarChar(50)   // e.g. General, Course, Platform, Support
+  message   String   @db.Text
+  rating    Int?     // 1-5 optional
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("student_feedback")
 }
 
 // ============================================

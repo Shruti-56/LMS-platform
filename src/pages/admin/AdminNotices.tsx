@@ -18,6 +18,12 @@ type Ack = {
   student: { id: string; email: string; profile: { fullName: string } | null };
 };
 
+type Recipient = {
+  id: string;
+  studentId: string;
+  student: { id: string; email: string; profile: { fullName: string } | null };
+};
+
 type Notice = {
   id: string;
   title: string;
@@ -27,11 +33,14 @@ type Notice = {
   expiresAt: string | null;
   creator: { id: string; email: string; profile: { fullName: string } | null };
   student: { id: string; email: string; profile: { fullName: string } | null } | null;
+  recipients?: Recipient[];
   acks?: Ack[];
-  _count?: { acks: number };
+  _count?: { acks: number; recipients?: number };
 };
 
 type StudentOption = { id: string; email: string; fullName: string };
+
+type BatchOption = { id: string; name: string; description: string | null; _count?: { students: number } };
 
 const AdminNotices: React.FC = () => {
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -42,7 +51,9 @@ const AdminNotices: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [studentId, setStudentId] = useState<string>(''); // '' = all students
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
+  const [batches, setBatches] = useState<BatchOption[]>([]);
   const [ackDialogOpen, setAckDialogOpen] = useState(false);
   const [ackList, setAckList] = useState<Ack[]>([]);
   const [ackNoticeTitle, setAckNoticeTitle] = useState('');
@@ -75,16 +86,35 @@ const AdminNotices: React.FC = () => {
     }
   };
 
+  const fetchBatches = async () => {
+    try {
+      const res = await api.get('/admin/live-lecture-batches');
+      if (res.ok) {
+        const list = await res.json();
+        setBatches(list.map((b: { id: string; name: string; description?: string | null; _count?: { students: number } }) => ({
+          id: b.id,
+          name: b.name,
+          description: b.description ?? null,
+          _count: b._count,
+        })));
+      }
+    } catch (e) {
+      console.error('Failed to load batches', e);
+    }
+  };
+
   useEffect(() => {
     fetchNotices();
     fetchStudents();
+    fetchBatches();
   }, []);
 
   const openCreate = () => {
     setEditingId(null);
     setTitle('');
     setBody('');
-    setStudentId('');
+    setSelectedStudentIds([]);
+    setSelectedBatchIds([]);
     setDialogOpen(true);
   };
 
@@ -92,7 +122,8 @@ const AdminNotices: React.FC = () => {
     setEditingId(n.id);
     setTitle(n.title);
     setBody(n.body);
-    setStudentId(n.studentId ?? '');
+    setSelectedStudentIds((n.recipients ?? []).map((r) => r.studentId));
+    setSelectedBatchIds([]);
     setDialogOpen(true);
   };
 
@@ -103,7 +134,12 @@ const AdminNotices: React.FC = () => {
     }
     setSaving(true);
     try {
-      const payload = { title: title.trim(), body: body.trim(), studentId: studentId.trim() || null };
+      const payload = {
+        title: title.trim(),
+        body: body.trim(),
+        studentIds: selectedStudentIds,
+        batchIds: selectedBatchIds,
+      };
       if (editingId) {
         const res = await api.put(`/admin/notices/${editingId}`, payload);
         if (res.ok) {
@@ -145,10 +181,12 @@ const AdminNotices: React.FC = () => {
     }
   };
 
-  const targetLabel = (n: Notice) =>
-    n.studentId
-      ? (n.student?.profile?.fullName || n.student?.email || 'One student')
-      : 'All students';
+  const targetLabel = (n: Notice) => {
+    const count = n._count?.recipients ?? n.recipients?.length ?? 0;
+    if (n.studentId) return n.student?.profile?.fullName || n.student?.email || 'One student';
+    if (count === 0) return 'All students';
+    return `${count} student${count === 1 ? '' : 's'}`;
+  };
 
   const openAcknowledgements = async (n: Notice) => {
     setAckNoticeTitle(n.title);
@@ -179,7 +217,7 @@ const AdminNotices: React.FC = () => {
         <div>
           <h1 className="text-3xl font-display font-bold text-foreground">Notices</h1>
           <p className="text-muted-foreground mt-1">
-            Create notices or news that appear on student dashboards. Target all students or a specific student.
+            Create notices that appear on student dashboards. Target all students, specific students, or entire live batches.
           </p>
         </div>
         <Button onClick={openCreate} className="gap-2 shrink-0">
@@ -251,17 +289,58 @@ const AdminNotices: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Show to</label>
-              <select
-                className="w-full px-3 py-2 rounded-lg border bg-background"
-                value={studentId}
-                onChange={(e) => setStudentId(e.target.value)}
-              >
-                <option value="">All students</option>
-                {students.map((s) => (
-                  <option key={s.id} value={s.id}>{s.fullName} ({s.email})</option>
-                ))}
-              </select>
+              <label className="block text-sm font-medium mb-1">Students (optional)</label>
+              <p className="text-xs text-muted-foreground mb-2">Select specific students. Leave empty with no batches = all students.</p>
+              <div className="max-h-40 overflow-y-auto rounded-lg border bg-muted/30 p-2 space-y-1">
+                {students.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">No students found.</p>
+                ) : (
+                  students.map((s) => (
+                    <label key={s.id} className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedStudentIds.includes(s.id)}
+                        onChange={(e) =>
+                          setSelectedStudentIds((prev) =>
+                            e.target.checked ? [...prev, s.id] : prev.filter((id) => id !== s.id)
+                          )
+                        }
+                        className="rounded border-input"
+                      />
+                      <span className="text-sm truncate">{s.fullName}</span>
+                      <span className="text-xs text-muted-foreground truncate">({s.email})</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Live batches (optional)</label>
+              <p className="text-xs text-muted-foreground mb-2">Everyone in these batches will receive the notice.</p>
+              <div className="max-h-40 overflow-y-auto rounded-lg border bg-muted/30 p-2 space-y-1">
+                {batches.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">No batches found.</p>
+                ) : (
+                  batches.map((b) => (
+                    <label key={b.id} className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedBatchIds.includes(b.id)}
+                        onChange={(e) =>
+                          setSelectedBatchIds((prev) =>
+                            e.target.checked ? [...prev, b.id] : prev.filter((id) => id !== b.id)
+                          )
+                        }
+                        className="rounded border-input"
+                      />
+                      <span className="text-sm font-medium">{b.name}</span>
+                      {b._count?.students != null && (
+                        <span className="text-xs text-muted-foreground">({b._count.students} students)</span>
+                      )}
+                    </label>
+                  ))
+                )}
+              </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>

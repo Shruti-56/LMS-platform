@@ -98,6 +98,52 @@ class EmailService {
   }
 
   /**
+   * Notify admin when a new student registers
+   */
+  async sendNewStudentNotificationToAdmin(
+    adminEmail: string,
+    studentEmail: string,
+    studentName?: string,
+    studentPhone?: string
+  ): Promise<boolean> {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+          <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <div style="text-align: center; margin-bottom: 30px;">
+              <h1 style="color: #6366f1; margin: 0; font-size: 28px;">🎓 DataUniverse Admin</h1>
+            </div>
+            <h2 style="color: #1f2937; margin-bottom: 16px; font-size: 24px;">New Student Registration</h2>
+            <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 16px;">
+              A new student has registered on the platform.
+            </p>
+            <div style="background-color: #f3f4f6; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+              <p style="margin: 0 0 8px 0;"><strong>Email:</strong> ${studentEmail}</p>
+              ${studentName ? `<p style="margin: 0 0 8px 0;"><strong>Name:</strong> ${studentName}</p>` : ''}
+              ${studentPhone ? `<p style="margin: 0;"><strong>Phone:</strong> ${studentPhone}</p>` : ''}
+            </div>
+            <p style="color: #6b7280; font-size: 14px;">
+              You can view and manage students in the Admin → Students section.
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+    return this.sendEmail({
+      to: adminEmail,
+      subject: `[DataUniverse] New student registered: ${studentEmail}`,
+      html,
+    });
+  }
+
+  /**
    * Send welcome email after registration
    */
   async sendWelcomeEmail(email: string, userName?: string): Promise<boolean> {
@@ -132,7 +178,7 @@ class EmailService {
               <li>📚 Browse our course marketplace</li>
               <li>🎯 Enroll in courses that interest you</li>
               <li>📈 Track your learning progress</li>
-              <li>🏆 Earn certificates upon completion</li>
+              <li>🏆 Track your progress and complete courses</li>
             </ul>
             
             <div style="text-align: center; margin: 32px 0;">
@@ -287,13 +333,12 @@ class EmailService {
   }
 
   /**
-   * Send course completion & certificate email
+   * Send course completion email
    */
   async sendCourseCompletionEmail(
     email: string, 
     courseName: string, 
-    userName?: string,
-    certificateUrl?: string
+    userName?: string
   ): Promise<boolean> {
     const dashboardUrl = `${process.env.FRONTEND_URL || 'http://localhost:8080'}/student/dashboard`;
 
@@ -324,18 +369,8 @@ class EmailService {
             
             <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); border-radius: 12px; padding: 24px; margin-bottom: 24px; text-align: center;">
               <h3 style="color: white; margin: 0 0 8px 0; font-size: 20px;">📚 ${courseName}</h3>
-              <p style="color: rgba(255,255,255,0.9); margin: 0; font-size: 14px;">Certificate of Completion</p>
+              <p style="color: rgba(255,255,255,0.9); margin: 0; font-size: 14px;">Course Completed</p>
             </div>
-            
-            ${certificateUrl ? `
-            <div style="text-align: center; margin: 24px 0;">
-              <a href="${certificateUrl}" 
-                 style="display: inline-block; background-color: #22c55e; color: white; text-decoration: none; 
-                        padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px;">
-                📄 Download Certificate
-              </a>
-            </div>
-            ` : ''}
             
             <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">
               Keep up the great work! Check out more courses to continue your learning journey.

@@ -8,7 +8,6 @@ async function main() {
 
   // Clean up existing data (in correct order for foreign keys)
   console.log('🗑️  Cleaning existing data...');
-  await prisma.certificate.deleteMany();
   await prisma.videoProgress.deleteMany();
   await prisma.purchase.deleteMany();
   await prisma.enrollment.deleteMany();

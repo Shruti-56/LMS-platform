@@ -14,11 +14,19 @@ export class AuthController {
    */
   register = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { email, password, fullName, phone } = req.body;
+      const { email, password, fullName, firstName, lastName, phone } = req.body;
 
-      // Validate input
-      if (!email || !password || !fullName) {
-        res.status(400).json({ error: 'Email, password, and full name are required' });
+      const first = (firstName != null && String(firstName).trim()) ? String(firstName).trim() : '';
+      const last = (lastName != null && String(lastName).trim()) ? String(lastName).trim() : '';
+      const full = (fullName != null && String(fullName).trim()) ? String(fullName).trim() : [first, last].filter(Boolean).join(' ').trim();
+
+      // Validate input: require either (firstName + lastName) or fullName
+      if (!email || !password) {
+        res.status(400).json({ error: 'Email and password are required' });
+        return;
+      }
+      if (!full || full.length < 2) {
+        res.status(400).json({ error: 'First name and last name (or full name) are required' });
         return;
       }
 
@@ -55,12 +63,6 @@ export class AuthController {
         return;
       }
 
-      // Validate full name
-      if (fullName.trim().length < 2) {
-        res.status(400).json({ error: 'Full name must be at least 2 characters' });
-        return;
-      }
-
       // Check if user exists
       const existingUser = await prisma.user.findUnique({
         where: { email: email.toLowerCase() },
@@ -74,7 +76,8 @@ export class AuthController {
       // Hash password
       const passwordHash = await bcrypt.hash(password, 12);
 
-      // Create user with profile (phone stored)
+      // Create user with profile. Only fullName and phoneNumber are required by the base schema.
+      // firstName/lastName are optional (added by migration); omit them here so registration works even before migration.
       const user = await prisma.user.create({
         data: {
           email: email.toLowerCase(),
@@ -82,7 +85,7 @@ export class AuthController {
           role: UserRole.STUDENT,
           profile: {
             create: {
-              fullName,
+              fullName: full,
               phoneNumber: phoneStr || null,
             },
           },
@@ -95,12 +98,20 @@ export class AuthController {
       emailService.sendWelcomeEmail(user.email, user.profile?.fullName || undefined)
         .catch(err => console.error('Failed to send welcome email:', err));
 
+      const adminEmail = process.env.ADMIN_EMAIL || (await prisma.user.findFirst({ where: { role: UserRole.ADMIN }, select: { email: true } }))?.email;
+      if (adminEmail) {
+        emailService.sendNewStudentNotificationToAdmin(adminEmail, user.email, user.profile?.fullName || undefined, user.profile?.phoneNumber || undefined)
+          .catch(err => console.error('Failed to send admin notification:', err));
+      }
+
       res.status(201).json({
         message: 'Registration successful.',
         user: {
           id: user.id,
           email: user.email,
           fullName: user.profile?.fullName,
+          firstName: user.profile?.firstName,
+          lastName: user.profile?.lastName,
           phoneNumber: user.profile?.phoneNumber,
           roles: [user.role],
         },
@@ -108,7 +119,11 @@ export class AuthController {
       });
     } catch (error) {
       console.error('Registration error:', error);
-      res.status(500).json({ error: 'Registration failed' });
+      const message = error instanceof Error ? error.message : 'Registration failed';
+      res.status(500).json({
+        error: 'Registration failed',
+        ...(process.env.NODE_ENV === 'development' && { details: message }),
+      });
     }
   };
 

@@ -14,7 +14,8 @@ import {
   Clock,
   Award,
   UserCheck,
-  UserPlus
+  UserPlus,
+  Download
 } from 'lucide-react';
 import {
   Dialog,
@@ -31,7 +32,6 @@ type Student = {
   avatarUrl: string | null;
   isBlocked: boolean;
   enrolledCourses: number;
-  certificates: number;
   createdAt: string;
 };
 
@@ -64,13 +64,6 @@ type StudentDetails = {
     isBlocked: boolean;
   } | null;
   enrollments: EnrollmentWithProgress[];
-  certificates: Array<{
-    id: string;
-    course: {
-      id: string;
-      title: string;
-    };
-  }>;
   screenTime: {
     weeklySeconds: number;
     lastActive: string | null;
@@ -86,6 +79,55 @@ const formatTime = (seconds: number): string => {
   }
   return `${mins}m`;
 };
+
+function escapeCsvCell(value: string): string {
+  if (/[",\n\r]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+type StudentExportRow = {
+  id: string;
+  fullName: string;
+  email: string;
+  phoneNumber: string;
+  createdAt: string;
+  isBlocked: boolean;
+  enrolledCourses: number;
+  courseNames: string;
+  progressText: string;
+};
+
+async function downloadStudentListExcel() {
+  try {
+    const res = await api.get('/admin/students/export');
+    if (!res.ok) throw new Error('Export failed');
+    const rows: StudentExportRow[] = await res.json();
+    const headers = ['Name', 'Email', 'Phone', 'Joined', 'Status', 'Courses Enrolled', 'Course Names', 'Progress'];
+    const csvRows = rows.map((s) => [
+      escapeCsvCell(s.fullName || ''),
+      escapeCsvCell(s.email),
+      escapeCsvCell(s.phoneNumber || ''),
+      escapeCsvCell(new Date(s.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })),
+      s.isBlocked ? 'Blocked' : 'Active',
+      String(s.enrolledCourses),
+      escapeCsvCell(s.courseNames || ''),
+      escapeCsvCell(s.progressText || ''),
+    ]);
+    const csvContent = [headers.join(','), ...csvRows.map((r) => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `students-list-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    return rows.length;
+  } catch (e) {
+    throw e;
+  }
+}
 
 const AdminStudents: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
@@ -395,9 +437,26 @@ const AdminStudents: React.FC = () => {
           <h1 className="text-3xl font-display font-bold text-foreground mb-2">Student Management</h1>
           <p className="text-muted-foreground">View and manage enrolled students. Register new students and add them to live-lecture batches.</p>
         </div>
-        <Button onClick={() => setShowRegisterDialog(true)} className="gap-2">
-          <UserPlus className="w-4 h-4" /> Register New Student
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={async () => {
+              try {
+                const count = await downloadStudentListExcel();
+                toast({ title: 'Downloaded', description: `${count} student(s) exported with phone, courses and progress. Open in Excel or Sheets.` });
+              } catch {
+                toast({ title: 'Export failed', description: 'Could not download student list. Try again.', variant: 'destructive' });
+              }
+            }}
+            className="gap-2"
+          >
+            <Download className="w-4 h-4" />
+            Export to Excel
+          </Button>
+          <Button onClick={() => setShowRegisterDialog(true)} className="gap-2">
+            <UserPlus className="w-4 h-4" /> Register New Student
+          </Button>
+        </div>
       </div>
 
       {/* Search */}
@@ -426,7 +485,6 @@ const AdminStudents: React.FC = () => {
                   <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Student</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Joined</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Courses</th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Certificates</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Status</th>
                   <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">Actions</th>
                 </tr>
@@ -462,9 +520,6 @@ const AdminStudents: React.FC = () => {
                           <BookOpen className="w-4 h-4 text-muted-foreground" />
                           <span className="text-sm text-foreground">{student.enrolledCourses}</span>
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-sm text-foreground">{student.certificates}</span>
                       </td>
                       <td className="px-6 py-4">
                         <Badge className={student.isBlocked 
@@ -645,26 +700,6 @@ const AdminStudents: React.FC = () => {
                 )}
               </div>
 
-              {/* Certificates */}
-              {selectedStudent.certificates.length > 0 && (
-                <div>
-                  <h4 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-                    <Award className="w-5 h-5" />
-                    Certificates Earned
-                  </h4>
-                  <div className="space-y-2">
-                    {selectedStudent.certificates.map(cert => (
-                      <div key={cert.id} className="p-3 bg-success/10 rounded-lg flex items-center gap-3">
-                        <Award className="w-5 h-5 text-success" />
-                        <div>
-                          <p className="font-medium text-foreground">{cert.course.title}</p>
-                          <p className="text-xs text-muted-foreground">Certificate of Completion</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           ) : null}
         </DialogContent>

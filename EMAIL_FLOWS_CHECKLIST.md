@@ -77,7 +77,7 @@ The email contains only the direct Teams/Meet URL (opens in new tab). Platform j
 | Trigger | Recipient | Email | Status |
 |--------|-----------|--------|--------|
 | Forgot password | User | Password reset link (1 hour expiry) | ✅ `auth.controller.ts` → `sendPasswordResetEmail` |
-| Course completed | Student | Congratulations + certificate link if available | ✅ `progress.controller.ts` → `sendCourseCompletionEmail` |
+| Course completed | Student | Congratulations email | ✅ `progress.controller.ts` → `sendCourseCompletionEmail` |
 
 ---
 

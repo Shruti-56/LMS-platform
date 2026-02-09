@@ -1,10 +1,10 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { 
-  GraduationCap, 
-  LayoutDashboard, 
-  BookOpen, 
+import {
+  GraduationCap,
+  LayoutDashboard,
+  BookOpen,
   Users,
   BarChart3,
   Settings,
@@ -18,7 +18,10 @@ import {
   Calendar,
   Radio,
   Megaphone,
-  ImagePlus
+  ImagePlus,
+  MessageSquare,
+  Award,
+  IndianRupee
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -44,8 +47,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/admin/courses', label: 'Courses', icon: BookOpen },
     { path: '/admin/students', label: 'Students', icon: Users },
+    { path: '/admin/fees', label: 'Fees', icon: IndianRupee },
     { path: '/admin/notices', label: 'Notices', icon: Megaphone },
     { path: '/admin/banners', label: 'Banners', icon: ImagePlus },
+    { path: '/admin/feedback', label: 'Feedback', icon: MessageSquare },
+    { path: '/admin/certificates', label: 'Certificates', icon: Award },
     { path: '/admin/instructors', label: 'Instructors', icon: UserCheck },
     { path: '/admin/interviews', label: 'Interviews', icon: Calendar },
     { path: '/admin/live-lectures', label: 'Live Lectures', icon: Radio },
@@ -143,8 +149,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-background flex">
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:block w-64 bg-sidebar fixed left-0 top-0 bottom-0 border-r border-sidebar-border">
+      {/* Desktop Sidebar - z-30 so it stays on top when main content scrolls */}
+      <aside className="hidden lg:block w-64 shrink-0 bg-sidebar fixed left-0 top-0 bottom-0 z-30 border-r border-sidebar-border">
         <SidebarContent />
       </aside>
 
@@ -168,8 +174,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1 lg:ml-64 pt-16 lg:pt-0 bg-gradient-to-br from-background via-background to-muted/20">
+      {/* Main Content - z-0 so it scrolls behind the sidebar */}
+      <main className="flex-1 min-w-0 lg:ml-64 pt-16 lg:pt-0 z-0 bg-gradient-to-br from-background via-background to-muted/20">
         <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
           <div className="animate-fade-in">
             {children}

@@ -11,6 +11,7 @@ import { liveLectureController } from '../controllers/live-lecture.controller';
 import { feesController } from '../controllers/fees.controller';
 import { noticeController } from '../controllers/notice.controller';
 import { promoBannerController } from '../controllers/promoBanner.controller';
+import { certificateController } from '../controllers/certificate.controller';
 import { authenticate } from '../middleware/auth';
 import { requireAdmin } from '../middleware/roleGuard';
 
@@ -48,6 +49,7 @@ router.put('/videos/:id/confirm-upload', adminController.confirmVideoUpload);
 
 // Student management
 router.get('/students', adminController.getAllStudents);
+router.get('/students/export', adminController.getStudentsExport);
 router.post('/students', adminController.createStudent);
 router.get('/students/:id', adminController.getStudentDetails);
 router.patch('/students/:id/block', adminController.toggleStudentBlock);
@@ -58,6 +60,7 @@ router.get('/analytics/courses/:courseId', adminController.getCourseAnalytics);
 
 // Screen time
 router.get('/screentime', adminController.getAllScreenTime);
+router.get('/screentime/export', adminController.exportScreenTime);
 router.get('/screentime/:userId', adminController.getStudentScreenTime);
 
 // Assignment management
@@ -94,7 +97,16 @@ router.post('/policies', policyController.createPolicy);
 router.post('/policies/upload-url', policyController.getUploadUrl);
 
 // Mock interviews
+router.get('/interviews/export', adminController.exportInterviews);
 router.post('/interviews', interviewController.scheduleInterview);
+
+// Student feedback (admin view)
+router.get('/feedback', adminController.getAllStudentFeedback);
+
+// Certificates (approve/reject)
+router.get('/certificates', certificateController.listForAdmin);
+router.post('/certificates/:id/approve', certificateController.approve);
+router.post('/certificates/:id/reject', certificateController.reject);
 
 // Live lecture batches
 router.get('/live-lecture-batches', liveLectureController.listBatches);

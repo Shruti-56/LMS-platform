@@ -589,6 +589,86 @@ export const liveLectureController = {
     }
   },
 
+  /** Student: summary of batches I'm in (for dashboard & My Learning) */
+  getMyBatchesSummary: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+      const batchStudents = await prisma.liveLectureBatchStudent.findMany({
+        where: { studentId: userId },
+        include: {
+          batch: {
+            select: {
+              id: true,
+              name: true,
+              modules: {
+                select: { id: true, name: true, startDate: true, endDate: true },
+                orderBy: { startDate: 'asc' },
+              },
+            },
+          },
+        },
+      });
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      const batchIds = batchStudents.map((b) => b.batch.id);
+      if (batchIds.length === 0) {
+        res.json({ batches: [] });
+        return;
+      }
+
+      const lectures = await prisma.liveLecture.findMany({
+        where: { batchId: { in: batchIds }, scheduledAt: { lt: now } },
+        select: {
+          id: true,
+          batchId: true,
+          recordingUrl: true,
+          attendances: {
+            where: { studentId: userId },
+            select: { attended: true },
+          },
+        },
+      });
+      const attendedSet = new Set(
+        lectures.filter((l) => l.attendances[0]?.attended).map((l) => l.id),
+      );
+      const recordedCountByBatch: Record<string, number> = {};
+      const totalByBatch: Record<string, number> = {};
+      const attendedByBatch: Record<string, number> = {};
+      for (const l of lectures) {
+        totalByBatch[l.batchId] = (totalByBatch[l.batchId] ?? 0) + 1;
+        if (l.recordingUrl) recordedCountByBatch[l.batchId] = (recordedCountByBatch[l.batchId] ?? 0) + 1;
+        if (attendedSet.has(l.id)) attendedByBatch[l.batchId] = (attendedByBatch[l.batchId] ?? 0) + 1;
+      }
+
+      const batches = batchStudents.map((bs) => {
+        const batch = bs.batch;
+        const currentModule = batch.modules.find((m) => {
+          const start = new Date(m.startDate);
+          const end = new Date(m.endDate);
+          end.setHours(23, 59, 59, 999);
+          return todayStart >= start && todayStart <= end;
+        });
+        return {
+          batchId: batch.id,
+          batchName: batch.name,
+          currentModuleName: currentModule?.name ?? null,
+          totalPastLectures: totalByBatch[batch.id] ?? 0,
+          recordedCount: recordedCountByBatch[batch.id] ?? 0,
+          attendedCount: attendedByBatch[batch.id] ?? 0,
+        };
+      });
+      res.json({ batches });
+    } catch (error: unknown) {
+      console.error('Get my batches summary error:', error);
+      res.status(500).json({ error: 'Failed to fetch batches summary' });
+    }
+  },
+
   createLecture: async (req: Request, res: Response): Promise<void> => {
     try {
       const { batchId, instructorId, title, meetingLink, scheduledAt, durationMinutes } = req.body;
@@ -719,6 +799,9 @@ export const liveLectureController = {
         create: { lectureId, studentId, attended, markedBy: userId },
         update: { attended, markedBy: userId },
       });
+      if (attended) {
+        // Attendance recorded
+      }
       const list = await prisma.liveLectureAttendance.findMany({
         where: { lectureId },
       });

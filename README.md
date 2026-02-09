@@ -269,7 +269,7 @@ learnflow-demo/
 - Welcome email (on registration)
 - Password reset link
 - Enrollment confirmation
-- Course completion certificate
+- Course completion (congratulations email)
 - Payment receipt
 - Submission review notification
 

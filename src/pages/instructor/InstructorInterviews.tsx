@@ -66,7 +66,11 @@ const InstructorInterviews: React.FC = () => {
       const response = await api.get('/interviews');
       if (response.ok) {
         const data = await response.json();
-        setInterviews(data);
+        // Sort by scheduled time (earliest first) so lists display in chronological order
+        const sorted = Array.isArray(data)
+          ? [...data].sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
+          : [];
+        setInterviews(sorted);
       }
     } catch (error) {
       console.error('Error fetching interviews:', error);
@@ -311,6 +315,7 @@ const InstructorInterviews: React.FC = () => {
     );
   }
 
+  // Upcoming: soonest first (asc by time). Past: most recent first (desc by time).
   const upcoming = interviews.filter(i => {
     const scheduled = new Date(i.scheduledAt);
     return scheduled > new Date() && i.status === 'SCHEDULED';

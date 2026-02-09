@@ -8,11 +8,16 @@ export const noticeController = {
   list: async (req: Request, res: Response): Promise<void> => {
     try {
       const { studentId } = req.query;
-      const where: { studentId?: string | null } = {};
+      let where: Parameters<typeof prisma.studentNotice.findMany>[0]['where'] = {};
       if (studentId === 'all' || studentId === '') {
-        where.studentId = null;
-      } else if (typeof studentId === 'string') {
-        where.studentId = studentId;
+        where = { studentId: null, recipients: { none: {} } };
+      } else if (typeof studentId === 'string' && studentId) {
+        where = {
+          OR: [
+            { studentId },
+            { recipients: { some: { studentId } } },
+          ],
+        };
       }
 
       const notices = await prisma.studentNotice.findMany({
@@ -20,8 +25,9 @@ export const noticeController = {
         include: {
           creator: { select: { id: true, email: true, profile: { select: { fullName: true } } } },
           student: { select: { id: true, email: true, profile: { select: { fullName: true } } } },
+          recipients: { include: { student: { select: { id: true, email: true, profile: { select: { fullName: true } } } } } },
           acks: { include: { student: { select: { id: true, email: true, profile: { select: { fullName: true } } } } } },
-          _count: { select: { acks: true } },
+          _count: { select: { acks: true, recipients: true } },
         },
         orderBy: { createdAt: 'desc' },
       });
@@ -32,7 +38,17 @@ export const noticeController = {
     }
   },
 
-  // Admin: create notice (target: studentId or null for all students)
+  // Resolve batchIds to unique student IDs via LiveLectureBatchStudent
+  async resolveBatchIdsToStudentIds(batchIds: string[]): Promise<string[]> {
+    if (!batchIds?.length) return [];
+    const rows = await prisma.liveLectureBatchStudent.findMany({
+      where: { batchId: { in: batchIds } },
+      select: { studentId: true },
+    });
+    return [...new Set(rows.map((r) => r.studentId))];
+  },
+
+  // Admin: create notice (target: studentIds[], batchIds[], or both; empty = all students)
   create: async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = req.user?.id;
@@ -40,21 +56,30 @@ export const noticeController = {
         res.status(401).json({ error: 'Unauthorized' });
         return;
       }
-      const { title, body, studentId } = req.body;
+      const { title, body, studentIds, batchIds } = req.body;
       if (!title?.trim()) {
         res.status(400).json({ error: 'Title is required' });
         return;
       }
+      const rawStudentIds = Array.isArray(studentIds) ? studentIds.map(String).filter(Boolean) : [];
+      const rawBatchIds = Array.isArray(batchIds) ? batchIds.map(String).filter(Boolean) : [];
+      const fromBatches = await noticeController.resolveBatchIdsToStudentIds(rawBatchIds);
+      const allStudentIds = [...new Set([...rawStudentIds, ...fromBatches])];
+
       const notice = await prisma.studentNotice.create({
         data: {
           title: title.trim(),
           body: (body ?? '').trim(),
-          studentId: studentId && String(studentId).trim() ? String(studentId).trim() : null,
+          studentId: null,
           createdBy: userId,
+          recipients: allStudentIds.length
+            ? { create: allStudentIds.map((studentId) => ({ studentId })) }
+            : undefined,
         },
         include: {
           creator: { select: { id: true, email: true, profile: { select: { fullName: true } } } },
           student: { select: { id: true, email: true, profile: { select: { fullName: true } } } },
+          recipients: { include: { student: { select: { id: true, email: true, profile: { select: { fullName: true } } } } } },
         },
       });
       res.status(201).json(notice);
@@ -64,22 +89,34 @@ export const noticeController = {
     }
   },
 
-  // Admin: update notice
+  // Admin: update notice (studentIds/batchIds: replace recipients; empty = all students)
   update: async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const { title, body, studentId } = req.body;
+      const { title, body, studentIds, batchIds } = req.body;
       const data: { title?: string; body?: string; studentId?: string | null } = {};
       if (title !== undefined) data.title = title.trim();
       if (body !== undefined) data.body = body.trim();
-      if (studentId !== undefined) data.studentId = studentId && String(studentId).trim() ? String(studentId).trim() : null;
+      data.studentId = null;
 
+      const rawStudentIds = Array.isArray(studentIds) ? studentIds.map(String).filter(Boolean) : [];
+      const rawBatchIds = Array.isArray(batchIds) ? batchIds.map(String).filter(Boolean) : [];
+      const fromBatches = await noticeController.resolveBatchIdsToStudentIds(rawBatchIds);
+      const allStudentIds = [...new Set([...rawStudentIds, ...fromBatches])];
+
+      await prisma.studentNoticeRecipient.deleteMany({ where: { noticeId: id } });
       const notice = await prisma.studentNotice.update({
         where: { id },
-        data,
+        data: {
+          ...data,
+          recipients: allStudentIds.length
+            ? { create: allStudentIds.map((studentId) => ({ studentId })) }
+            : undefined,
+        },
         include: {
           creator: { select: { id: true, email: true, profile: { select: { fullName: true } } } },
           student: { select: { id: true, email: true, profile: { select: { fullName: true } } } },
+          recipients: { include: { student: { select: { id: true, email: true, profile: { select: { fullName: true } } } } } },
         },
       });
       res.json(notice);
@@ -113,7 +150,13 @@ export const noticeController = {
       const notices = await prisma.studentNotice.findMany({
         where: {
           AND: [
-            { OR: [{ studentId: null }, { studentId: userId }] },
+            {
+              OR: [
+                { studentId: null, recipients: { none: {} } },
+                { studentId: userId },
+                { recipients: { some: { studentId: userId } } },
+              ],
+            },
             { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
             {
               NOT: {
@@ -160,7 +203,11 @@ export const noticeController = {
       const notice = await prisma.studentNotice.findFirst({
         where: {
           id: noticeId,
-          OR: [{ studentId: null }, { studentId: userId }],
+          OR: [
+            { studentId: null, recipients: { none: {} } },
+            { studentId: userId },
+            { recipients: { some: { studentId: userId } } },
+          ],
         },
       });
       if (!notice) {

@@ -2,7 +2,7 @@ import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } fro
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 /**
- * S3 Service for file storage (videos, thumbnails, certificates)
+ * S3 Service for file storage (videos, thumbnails, avatars)
  */
 export class S3Service {
   private client: S3Client;
@@ -63,7 +63,7 @@ export class S3Service {
   /**
    * Generate storage key for different file types
    */
-  static generateKey(type: 'video' | 'thumbnail' | 'certificate' | 'avatar', id: string, filename: string): string {
+  static generateKey(type: 'video' | 'thumbnail' | 'avatar', id: string, filename: string): string {
     const timestamp = Date.now();
     const sanitizedFilename = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
     return `${type}s/${id}/${timestamp}-${sanitizedFilename}`;

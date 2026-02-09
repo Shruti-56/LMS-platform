@@ -18,6 +18,8 @@ import liveLectureRoutes from './live-lecture.routes';
 import feesRoutes from './fees.routes';
 import noticesRoutes from './notices.routes';
 import promoBannerRoutes from './promoBanner.routes';
+import feedbackRoutes from './feedback.routes';
+import certificateRoutes from './certificate.routes';
 
 const router = Router();
 
@@ -41,5 +43,7 @@ router.use('/live-lectures', liveLectureRoutes);
 router.use('/fees', feesRoutes);
 router.use('/notices', noticesRoutes);
 router.use('/promo-banners', promoBannerRoutes);
+router.use('/feedback', feedbackRoutes);
+router.use('/certificates', certificateRoutes);
 
 export default router;

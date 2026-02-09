@@ -11,7 +11,8 @@ import {
   PlayCircle, 
   ArrowRight,
   TrendingUp,
-  Megaphone
+  Megaphone,
+  Radio
 } from 'lucide-react';
 import PromoBanner from '@/components/PromoBanner';
 
@@ -47,11 +48,21 @@ type Notice = {
   createdAt: string;
 };
 
+type LiveBatchSummary = {
+  batchId: string;
+  batchName: string;
+  currentModuleName: string | null;
+  totalPastLectures: number;
+  recordedCount: number;
+  attendedCount: number;
+};
+
 const StudentDashboard: React.FC = () => {
   const { user, isAuthenticated } = useAuth();
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [overallProgress, setOverallProgress] = useState<OverallProgress | null>(null);
   const [notices, setNotices] = useState<Notice[]>([]);
+  const [liveBatches, setLiveBatches] = useState<LiveBatchSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -62,10 +73,11 @@ const StudentDashboard: React.FC = () => {
 
     const fetchData = async () => {
       try {
-        const [enrollmentsRes, progressRes, noticesRes] = await Promise.all([
+        const [enrollmentsRes, progressRes, noticesRes, batchesRes] = await Promise.all([
           api.get('/enrollments'),
           api.get('/progress/overall'),
           api.get('/notices'),
+          api.get('/live-lectures/my-batches'),
         ]);
 
         if (enrollmentsRes.ok) {
@@ -81,6 +93,11 @@ const StudentDashboard: React.FC = () => {
         if (noticesRes.ok) {
           const noticesData = await noticesRes.json();
           setNotices(noticesData);
+        }
+
+        if (batchesRes.ok) {
+          const { batches } = await batchesRes.json();
+          setLiveBatches(batches ?? []);
         }
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
@@ -102,6 +119,8 @@ const StudentDashboard: React.FC = () => {
 
   const firstName = user?.fullName?.split(' ')[0] || 'Student';
   const completedCourses = enrollments.filter(e => e.completedAt !== null || e.progress === 100).length;
+  const hasLiveBatches = liveBatches.length > 0;
+  const hasAnyEnrollment = enrollments.length > 0 || hasLiveBatches;
 
   const acknowledgeNotice = async (noticeId: string, action: 'dismissed' | 'remind_later') => {
     try {
@@ -125,13 +144,25 @@ const StudentDashboard: React.FC = () => {
               Ready to continue your learning journey?
             </p>
           </div>
-          {enrollments.length > 0 && (
-            <Link to={`/student/course/${enrollments[0].course.id}`}>
-              <Button variant="accent" size="lg" className="gap-2">
-                <PlayCircle className="w-5 h-5" />
-                Continue Learning
-              </Button>
-            </Link>
+          {(enrollments.length > 0 || hasLiveBatches) && (
+            <>
+              {enrollments.length > 0 && (
+                <Link to={`/student/course/${enrollments[0].course.id}`}>
+                  <Button variant="accent" size="lg" className="gap-2">
+                    <PlayCircle className="w-5 h-5" />
+                    Continue Learning
+                  </Button>
+                </Link>
+              )}
+              {enrollments.length === 0 && hasLiveBatches && (
+                <Link to="/student/live-lectures">
+                  <Button variant="accent" size="lg" className="gap-2">
+                    <Radio className="w-5 h-5" />
+                    Go to Live Lectures
+                  </Button>
+                </Link>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -139,19 +170,34 @@ const StudentDashboard: React.FC = () => {
       {/* Promo banners (admin-managed carousel) */}
       <PromoBanner />
 
-      {/* Notices from admin – below welcome strip, catchy cards with acknowledge */}
+      {/* Notices from admin – eye-catching until acknowledged (glow, pulse, shimmer) */}
       {notices.length > 0 && (
         <div className="space-y-4">
           {notices.map((n) => (
             <div
               key={n.id}
-              className="relative overflow-hidden rounded-2xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 dark:border-amber-800/50 p-5 shadow-lg"
+              className="animate-notice-in relative overflow-hidden rounded-2xl border-2 border-amber-300 dark:border-amber-600 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 p-5"
+              style={{ opacity: 0 }}
             >
-              <div className="flex gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400">
+              {/* Shimmer bar sweeps across continuously until acknowledged */}
+              <div className="animate-notice-shimmer absolute inset-0 overflow-hidden pointer-events-none z-0 rounded-2xl" aria-hidden>
+                <div className="absolute top-0 bottom-0 w-[45%] bg-gradient-to-r from-transparent via-amber-300/55 to-transparent dark:via-amber-400/45" />
+              </div>
+
+              <div className="relative z-10 flex gap-4">
+                <div className="animate-notice-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500/30 text-amber-600 dark:text-amber-400 ring-2 ring-amber-400/60 dark:ring-amber-500/50">
                   <Megaphone className="h-6 w-6" />
                 </div>
                 <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-400/20 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-amber-700 dark:bg-amber-500/30 dark:text-amber-300">
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
+                        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-500" />
+                      </span>
+                      New announcement
+                    </span>
+                  </div>
                   <h3 className="font-semibold text-foreground text-lg">{n.title}</h3>
                   <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap">{n.body}</p>
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -186,10 +232,19 @@ const StudentDashboard: React.FC = () => {
               <BookOpen className="w-6 h-6 text-primary" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Enrolled Courses</p>
+              <p className="text-sm text-muted-foreground">Enrolled</p>
               <p className="text-2xl font-bold text-foreground">
-                {overallProgress?.enrolledCourses || enrollments.length}
+                {enrollments.length > 0 || hasLiveBatches
+                  ? enrollments.length + liveBatches.length
+                  : (overallProgress?.enrolledCourses ?? 0)}
               </p>
+              {(enrollments.length > 0 || hasLiveBatches) && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {enrollments.length > 0 && `${enrollments.length} course${enrollments.length !== 1 ? 's' : ''}`}
+                  {enrollments.length > 0 && hasLiveBatches && ' · '}
+                  {hasLiveBatches && `${liveBatches.length} live batch${liveBatches.length !== 1 ? 'es' : ''}`}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -214,7 +269,7 @@ const StudentDashboard: React.FC = () => {
               <Trophy className="w-6 h-6 text-accent" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Certificates</p>
+              <p className="text-sm text-muted-foreground">Courses Completed</p>
               <p className="text-2xl font-bold text-foreground">
                 {overallProgress?.completedCourses || completedCourses}
               </p>
@@ -232,7 +287,7 @@ const StudentDashboard: React.FC = () => {
           </Link>
         </div>
 
-        {enrollments.length === 0 ? (
+        {enrollments.length === 0 && !hasLiveBatches ? (
           <div className="bg-card rounded-xl border border-border p-12 text-center">
             <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-foreground mb-2">No courses yet</h3>
@@ -240,6 +295,37 @@ const StudentDashboard: React.FC = () => {
             <Link to="/student/marketplace">
               <Button>Browse Courses</Button>
             </Link>
+          </div>
+        ) : enrollments.length === 0 && hasLiveBatches ? (
+          <div className="space-y-4">
+            <div className="bg-card rounded-xl border border-border p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <Radio className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">Your live lecture batches</h3>
+                  <p className="text-sm text-muted-foreground">You're enrolled in {liveBatches.length} batch{liveBatches.length !== 1 ? 'es' : ''}. Join live sessions and watch recordings.</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {liveBatches.map((b) => (
+                  <span key={b.batchId} className="inline-flex items-center rounded-lg bg-muted px-3 py-1.5 text-sm font-medium text-foreground">
+                    {b.batchName}
+                    {b.currentModuleName && <span className="ml-1.5 text-muted-foreground">· {b.currentModuleName}</span>}
+                  </span>
+                ))}
+              </div>
+              <Link to="/student/live-lectures" className="inline-flex mt-4">
+                <Button className="gap-2">
+                  <PlayCircle className="w-4 h-4" /> Go to Live Lectures
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Want video courses too? <Link to="/student/marketplace" className="text-primary hover:underline">Browse courses</Link>.
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
@@ -268,6 +354,29 @@ const StudentDashboard: React.FC = () => {
                 </div>
               </Link>
             ))}
+            {hasLiveBatches && (
+              <Link
+                to="/student/live-lectures"
+                className="bg-card rounded-xl border border-border shadow-card hover:shadow-card-hover transition-all duration-300 overflow-hidden group flex flex-col"
+              >
+                <div className="aspect-video bg-muted relative flex-1 min-h-[120px]">
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Radio className="w-12 h-12 text-primary opacity-80 group-hover:scale-110 transition-transform" />
+                  </div>
+                </div>
+                <div className="p-4">
+                  <p className="text-xs text-primary font-medium mb-1">Live lectures</p>
+                  <h3 className="font-semibold text-foreground mb-3 line-clamp-2">
+                    {liveBatches.length} batch{liveBatches.length !== 1 ? 'es' : ''}
+                  </h3>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>Join live · Watch recordings</span>
+                    <ArrowRight className="w-4 h-4 ml-auto text-primary" />
+                  </div>
+                </div>
+              </Link>
+            )}
           </div>
         )}
       </div>

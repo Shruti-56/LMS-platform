@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { IndianRupee, Plus, Loader2, History, User } from 'lucide-react';
+import { IndianRupee, Plus, Loader2, History, Wallet, CheckCircle, Clock } from 'lucide-react';
 
 type FeeRow = {
   id: string;
@@ -133,11 +133,45 @@ const AdminFees: React.FC = () => {
     );
   }
 
+  const totalToReceive = list.reduce((s, r) => s + r.totalAmount, 0);
+  const totalReceived = list.reduce((s, r) => s + r.paidAmount, 0);
+  const totalBalance = list.reduce((s, r) => s + r.remainingAmount, 0);
+
   return (
     <div className="space-y-8 animate-fade-in">
       <div>
         <h1 className="text-3xl font-display font-bold text-foreground mb-2">Fees Management</h1>
-        <p className="text-muted-foreground">Set total fees per student and record cash payments. No payment gateway.</p>
+        <p className="text-muted-foreground">Manage cash payments: set total fees per student, record payments, and track balance.</p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-card rounded-xl border p-5 flex items-center gap-4">
+          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Wallet className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground font-medium">Total to Receive</p>
+            <p className="text-xl font-bold text-foreground">₹{totalToReceive.toLocaleString('en-IN')}</p>
+          </div>
+        </div>
+        <div className="bg-card rounded-xl border p-5 flex items-center gap-4">
+          <div className="w-12 h-12 rounded-lg bg-green-500/10 flex items-center justify-center">
+            <CheckCircle className="w-6 h-6 text-green-600" />
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground font-medium">Received</p>
+            <p className="text-xl font-bold text-green-600">₹{totalReceived.toLocaleString('en-IN')}</p>
+          </div>
+        </div>
+        <div className="bg-card rounded-xl border p-5 flex items-center gap-4">
+          <div className="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center">
+            <Clock className="w-6 h-6 text-amber-600" />
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground font-medium">Balance</p>
+            <p className="text-xl font-bold text-foreground">₹{totalBalance.toLocaleString('en-IN')}</p>
+          </div>
+        </div>
       </div>
 
       <div className="bg-card rounded-xl border overflow-hidden">

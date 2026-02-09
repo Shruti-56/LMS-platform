@@ -20,6 +20,7 @@ import AdminLayout from "./components/layout/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminCourses from "./pages/admin/AdminCourses";
 import AdminStudents from "./pages/admin/AdminStudents";
+import AdminFees from "./pages/admin/AdminFees";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import AdminProfile from "./pages/admin/AdminProfile";
 import AdminVideoUpload from "./pages/admin/AdminVideoUpload";
@@ -32,6 +33,8 @@ import AdminInterviews from "./pages/admin/AdminInterviews";
 import AdminLiveLectures from "./pages/admin/AdminLiveLectures";
 import AdminNotices from "./pages/admin/AdminNotices";
 import AdminPromoBanners from "./pages/admin/AdminPromoBanners";
+import AdminFeedback from "./pages/admin/AdminFeedback";
+import AdminCertificates from "./pages/admin/AdminCertificates";
 import LiveLectures from "./pages/student/LiveLectures";
 import LiveLectureJoin from "./pages/student/LiveLectureJoin";
 import NotFound from "./pages/NotFound";
@@ -41,7 +44,12 @@ import MySubmissions from "./pages/student/MySubmissions";
 import MyInterviews from "./pages/student/MyInterviews";
 import AlumniVideos from "./pages/student/AlumniVideos";
 import Policies from "./pages/student/Policies";
+import PaymentHistory from "./pages/student/PaymentHistory";
+import MyFees from "./pages/student/MyFees";
+import Feedback from "./pages/student/Feedback";
+import MyCertificates from "./pages/student/MyCertificates";
 import InstructorSubmissions from "./pages/instructor/InstructorSubmissions";
+import InstructorMyStudents from "./pages/instructor/InstructorMyStudents";
 import InstructorInterviews from "./pages/instructor/InstructorInterviews";
 
 const queryClient = new QueryClient();
@@ -206,10 +214,15 @@ const AppRoutes = () => {
       <Route path="/student/live-lectures" element={<StudentRoute><LiveLectures /></StudentRoute>} />
       <Route path="/student/live-lectures/join" element={<LiveLectureJoin />} />
       <Route path="/student/alumni" element={<StudentRoute><AlumniVideos /></StudentRoute>} />
+      <Route path="/student/feedback" element={<StudentRoute><Feedback /></StudentRoute>} />
+      <Route path="/student/certificates" element={<StudentRoute><MyCertificates /></StudentRoute>} />
       <Route path="/student/policies" element={<StudentRoute><Policies /></StudentRoute>} />
+      <Route path="/student/payment-history" element={<StudentRoute><PaymentHistory /></StudentRoute>} />
+      <Route path="/student/fees" element={<StudentRoute><MyFees /></StudentRoute>} />
       
       {/* Instructor Routes */}
       <Route path="/instructor/submissions" element={<InstructorRoute><InstructorSubmissions /></InstructorRoute>} />
+      <Route path="/instructor/students" element={<InstructorRoute><InstructorMyStudents /></InstructorRoute>} />
       <Route path="/instructor/interviews" element={<InstructorRoute><InstructorInterviews /></InstructorRoute>} />
       
       {/* Admin Routes */}
@@ -218,6 +231,7 @@ const AppRoutes = () => {
       <Route path="/admin/courses/:courseId/edit" element={<AdminRoute><AdminCourseEdit /></AdminRoute>} />
       <Route path="/admin/videos/:videoId/upload" element={<AdminRoute><AdminVideoUpload /></AdminRoute>} />
       <Route path="/admin/students" element={<AdminRoute><AdminStudents /></AdminRoute>} />
+      <Route path="/admin/fees" element={<AdminRoute><AdminFees /></AdminRoute>} />
       <Route path="/admin/analytics" element={<AdminRoute><AdminAnalytics /></AdminRoute>} />
       <Route path="/admin/screentime" element={<AdminRoute><AdminScreenTime /></AdminRoute>} />
       <Route path="/admin/instructors" element={<AdminRoute><AdminInstructors /></AdminRoute>} />
@@ -227,6 +241,8 @@ const AppRoutes = () => {
       <Route path="/admin/live-lectures" element={<AdminRoute><AdminLiveLectures /></AdminRoute>} />
       <Route path="/admin/notices" element={<AdminRoute><AdminNotices /></AdminRoute>} />
       <Route path="/admin/banners" element={<AdminRoute><AdminPromoBanners /></AdminRoute>} />
+      <Route path="/admin/feedback" element={<AdminRoute><AdminFeedback /></AdminRoute>} />
+      <Route path="/admin/certificates" element={<AdminRoute><AdminCertificates /></AdminRoute>} />
       <Route path="/admin/profile" element={<AdminRoute><AdminProfile /></AdminRoute>} />
       
       <Route path="*" element={<NotFound />} />

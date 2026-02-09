@@ -60,7 +60,6 @@ This document lists **all features** of the DataUniverse e-learning platform (LM
 | **Assignments** | Submit assignment after each lecture (text or file upload to S3) |
 | **Projects** | Submit project after each module |
 | **My submissions** | View own assignment/project submissions, status, score, feedback |
-| **Certificates** | Course completion certificates (e.g. on completion) |
 
 ### 2.3 Live Lectures
 
@@ -286,7 +285,7 @@ This document lists **all features** of the DataUniverse e-learning platform (LM
 
 - **User**, **Profile**
 - **Course**, **Module**, **Video**
-- **Enrollment**, **Purchase**, **VideoProgress**, **Certificate**
+- **Enrollment**, **Purchase**, **VideoProgress**
 - **ScreenTime**, **PasswordReset**
 - **Assignment**, **Project**, **Submission**
 - **StudentInstructor**

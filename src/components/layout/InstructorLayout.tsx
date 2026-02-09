@@ -7,7 +7,8 @@ import {
   Calendar,
   LogOut,
   User,
-  UserCheck
+  UserCheck,
+  Users
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,7 @@ const InstructorLayout: React.FC<InstructorLayoutProps> = ({ children }) => {
   // Instructor-specific navigation items only
   const navItems = [
     { path: '/instructor/submissions', label: 'Submissions', icon: FileText },
+    { path: '/instructor/students', label: 'My Students', icon: Users },
     { path: '/instructor/interviews', label: 'Interviews', icon: Calendar },
   ];
 

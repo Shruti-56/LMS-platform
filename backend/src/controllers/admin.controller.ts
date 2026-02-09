@@ -515,7 +515,6 @@ export class AdminController {
           _count: {
             select: {
               enrollments: true,
-              certificates: true,
             },
           },
         },
@@ -529,12 +528,84 @@ export class AdminController {
         avatarUrl: s.profile?.avatarUrl,
         isBlocked: s.profile?.isBlocked || false,
         enrolledCourses: s._count.enrollments,
-        certificates: s._count.certificates,
         createdAt: s.createdAt,
       })));
     } catch (error) {
       console.error('Get students error:', error);
       res.status(500).json({ error: 'Failed to fetch students' });
+    }
+  };
+
+  /**
+   * GET /api/admin/students/export
+   * Returns all students with phone, enrollments, and per-course progress for Excel/CSV export.
+   */
+  getStudentsExport = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const students = await prisma.user.findMany({
+        where: { role: UserRole.STUDENT },
+        include: {
+          profile: true,
+          enrollments: {
+            include: {
+              course: {
+                include: {
+                  modules: { include: { videos: { select: { id: true } } } },
+                  videos: { select: { id: true } },
+                },
+              },
+            },
+          },
+          videoProgress: {
+            where: { isCompleted: true },
+            select: { videoId: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const completedVideoIdsByUser = new Map<string, Set<string>>();
+      students.forEach((s) => {
+        completedVideoIdsByUser.set(s.id, new Set(s.videoProgress.map((vp) => vp.videoId)));
+      });
+
+      const exportRows = students.map((s) => {
+        const completedIds = completedVideoIdsByUser.get(s.id) ?? new Set<string>();
+        const enrollmentsWithProgress = s.enrollments.map((e) => {
+          const totalVideos =
+            (e.course.modules?.reduce((sum, m) => sum + (m.videos?.length ?? 0), 0) ?? 0) +
+            (e.course.videos?.length ?? 0);
+          let completed = 0;
+          e.course.modules?.forEach((m) => {
+            m.videos?.forEach((v) => {
+              if (completedIds.has(v.id)) completed++;
+            });
+          });
+          (e.course.videos ?? []).forEach((v) => {
+            if (completedIds.has(v.id)) completed++;
+          });
+          const percent = totalVideos > 0 ? Math.round((completed / totalVideos) * 100) : 0;
+          return { title: e.course.title, percent };
+        });
+        const courseNames = enrollmentsWithProgress.map((e) => e.title).join('; ');
+        const progressText = enrollmentsWithProgress.map((e) => `${e.title}: ${e.percent}%`).join('; ');
+        return {
+          id: s.id,
+          fullName: s.profile?.fullName ?? '',
+          email: s.email,
+          phoneNumber: s.profile?.phoneNumber ?? '',
+          createdAt: s.createdAt,
+          isBlocked: s.profile?.isBlocked ?? false,
+          enrolledCourses: s.enrollments.length,
+          courseNames,
+          progressText,
+        };
+      });
+
+      res.json(exportRows);
+    } catch (error) {
+      console.error('Get students export error:', error);
+      res.status(500).json({ error: 'Failed to export students' });
     }
   };
 
@@ -559,11 +630,6 @@ export class AdminController {
                   },
                 },
               },
-            },
-          },
-          certificates: {
-            include: {
-              course: true,
             },
           },
           videoProgress: {
@@ -632,7 +698,6 @@ export class AdminController {
         createdAt: student.createdAt,
         profile: student.profile,
         enrollments: enrollmentsWithProgress,
-        certificates: student.certificates,
         screenTime: {
           weeklySeconds: totalScreenTime,
           lastActive: screenTimeRecords[0]?.lastPing || null,
@@ -793,39 +858,31 @@ export class AdminController {
 
   /**
    * GET /api/admin/screentime
-   * Get all students' screen time summary
+   * Get all students' screen time: overall (since enrollment) and this week
    */
   getAllScreenTime = async (_req: Request, res: Response): Promise<void> => {
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-
       const weekAgo = new Date(today);
       weekAgo.setDate(weekAgo.getDate() - 7);
 
-      // Get today's date string for comparison
-      const todayStr = today.toISOString().split('T')[0];
-
-      // First, get all students
       const students = await prisma.user.findMany({
         where: { role: UserRole.STUDENT },
         include: {
           profile: true,
+          enrollments: { select: { enrolledAt: true }, orderBy: { enrolledAt: 'asc' }, take: 1 },
         },
       });
 
-      // Then get screen time data separately to avoid relation issues
-      const screenTimeRecords = await prisma.screenTime.findMany({
-        where: { 
-          date: { gte: weekAgo },
-          userId: { in: students.map(s => s.id) }
-        },
+      const userIds = students.map((s) => s.id);
+      const allScreenTime = await prisma.screenTime.findMany({
+        where: { userId: { in: userIds } },
         orderBy: { date: 'desc' },
       });
 
-      // Group screen time by user
-      const screenTimeByUser = new Map<string, typeof screenTimeRecords>();
-      for (const record of screenTimeRecords) {
+      const screenTimeByUser = new Map<string, typeof allScreenTime>();
+      for (const record of allScreenTime) {
         const existing = screenTimeByUser.get(record.userId) || [];
         existing.push(record);
         screenTimeByUser.set(record.userId, existing);
@@ -833,36 +890,144 @@ export class AdminController {
 
       const screenTimeData = students.map((student) => {
         const userScreenTime = screenTimeByUser.get(student.id) || [];
-        
-        // Find today's entry by comparing date strings
-        const todayTime = userScreenTime.find((st) => {
-          const stDateStr = new Date(st.date).toISOString().split('T')[0];
-          return stDateStr === todayStr;
-        });
-        
-        const weeklyTotal = userScreenTime.reduce(
-          (sum, st) => sum + st.totalSeconds,
-          0
-        );
+        const firstEnrolledAt = student.enrollments?.[0]?.enrolledAt
+          ? new Date(student.enrollments[0].enrolledAt)
+          : new Date(student.createdAt);
+        firstEnrolledAt.setHours(0, 0, 0, 0);
+
+        let overallSeconds = 0;
+        let weeklySeconds = 0;
+        for (const st of userScreenTime) {
+          const stDate = new Date(st.date);
+          stDate.setHours(0, 0, 0, 0);
+          if (stDate.getTime() >= firstEnrolledAt.getTime()) {
+            overallSeconds += st.totalSeconds;
+          }
+          if (stDate.getTime() >= weekAgo.getTime()) {
+            weeklySeconds += st.totalSeconds;
+          }
+        }
 
         return {
           userId: student.id,
           email: student.email,
           fullName: student.profile?.fullName || 'Unknown',
-          todaySeconds: todayTime?.totalSeconds || 0,
-          weeklySeconds: weeklyTotal,
+          enrolledAt: firstEnrolledAt.toISOString(),
+          overallSeconds,
+          weeklySeconds,
           lastActive: userScreenTime[0]?.lastPing || null,
         };
       });
 
-      // Sort by weekly time descending
-      screenTimeData.sort((a, b) => b.weeklySeconds - a.weeklySeconds);
+      screenTimeData.sort((a, b) => b.overallSeconds - a.overallSeconds);
 
       res.json(screenTimeData);
     } catch (error: unknown) {
       console.error('Get all screen time error:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Failed to fetch screen time data',
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  /**
+   * GET /api/admin/screentime/export
+   * Export screen time (overall since enrollment + this week) as CSV for Excel
+   */
+  exportScreenTime = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const weekAgo = new Date(today);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+
+      const students = await prisma.user.findMany({
+        where: { role: UserRole.STUDENT },
+        include: {
+          profile: true,
+          enrollments: { select: { enrolledAt: true }, orderBy: { enrolledAt: 'asc' }, take: 1 },
+        },
+      });
+
+      const userIds = students.map((s) => s.id);
+      const allScreenTime = await prisma.screenTime.findMany({
+        where: { userId: { in: userIds } },
+        orderBy: { date: 'desc' },
+      });
+
+      const screenTimeByUser = new Map<string, typeof allScreenTime>();
+      for (const record of allScreenTime) {
+        const existing = screenTimeByUser.get(record.userId) || [];
+        existing.push(record);
+        screenTimeByUser.set(record.userId, existing);
+      }
+
+      const formatSeconds = (sec: number) => {
+        if (sec < 60) return `${sec}s`;
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        return h > 0 ? `${h}h ${m}m` : `${m}m`;
+      };
+
+      const rows = students.map((student) => {
+        const userScreenTime = screenTimeByUser.get(student.id) || [];
+        const firstEnrolledAt = student.enrollments?.[0]?.enrolledAt
+          ? new Date(student.enrollments[0].enrolledAt)
+          : new Date(student.createdAt);
+        firstEnrolledAt.setHours(0, 0, 0, 0);
+
+        let overallSeconds = 0;
+        let weeklySeconds = 0;
+        let lastActive: Date | null = null;
+        for (const st of userScreenTime) {
+          const stDate = new Date(st.date);
+          stDate.setHours(0, 0, 0, 0);
+          if (stDate.getTime() >= firstEnrolledAt.getTime()) overallSeconds += st.totalSeconds;
+          if (stDate.getTime() >= weekAgo.getTime()) weeklySeconds += st.totalSeconds;
+          if (!lastActive || (st.lastPing && new Date(st.lastPing) > lastActive)) lastActive = st.lastPing;
+        }
+
+        const fullName = (student.profile?.fullName || 'Unknown').replace(/"/g, '""');
+        const email = String(student.email).replace(/"/g, '""');
+        const enrolledAt = firstEnrolledAt.toISOString().split('T')[0];
+        const lastActiveStr = lastActive ? new Date(lastActive).toISOString() : '';
+
+        return [
+          fullName,
+          email,
+          enrolledAt,
+          String(overallSeconds),
+          formatSeconds(overallSeconds),
+          String(weeklySeconds),
+          formatSeconds(weeklySeconds),
+          lastActiveStr,
+        ];
+      });
+
+      const headers = [
+        'Student',
+        'Email',
+        'Enrolled At',
+        'Overall (seconds)',
+        'Overall',
+        'This Week (seconds)',
+        'This Week',
+        'Last Active',
+      ];
+      const csvContent = [
+        headers.join(','),
+        ...rows.map((r) => r.map((c) => `"${c}"`).join(',')),
+      ].join('\r\n');
+
+      const filename = `screen-time-${today.toISOString().slice(0, 10)}.csv`;
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send('\uFEFF' + csvContent);
+    } catch (error: unknown) {
+      console.error('Export screen time error:', error);
+      res.status(500).json({
+        error: 'Failed to export screen time',
         details: error instanceof Error ? error.message : String(error),
       });
     }
@@ -917,6 +1082,122 @@ export class AdminController {
       console.error('Get student screen time error:', error);
       res.status(500).json({ 
         error: 'Failed to fetch student screen time',
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  /**
+   * GET /api/admin/interviews/export
+   * Export interview schedule (all students) as CSV for Excel
+   */
+  exportInterviews = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const interviews = await prisma.interview.findMany({
+        include: {
+          student: {
+            select: {
+              id: true,
+              email: true,
+              profile: { select: { fullName: true, phoneNumber: true } },
+            },
+          },
+          instructor: {
+            select: {
+              id: true,
+              email: true,
+              profile: { select: { fullName: true } },
+            },
+          },
+          feedback: {
+            select: {
+              overallRating: true,
+              submittedAt: true,
+            },
+          },
+        },
+        orderBy: { scheduledAt: 'desc' },
+      });
+
+      const escape = (s: string | null | undefined) => {
+        if (s == null) return '""';
+        return `"${String(s).replace(/"/g, '""')}"`;
+      };
+
+      const headers = [
+        'Student Name',
+        'Student Email',
+        'Student Phone',
+        'Instructor Name',
+        'Instructor Email',
+        'Scheduled At',
+        'Duration (min)',
+        'Status',
+        'Meeting Link',
+        'Attended',
+        'Overall Rating',
+        'Feedback Submitted At',
+      ];
+
+      const rows = interviews.map((i) => {
+        const scheduledAt = new Date(i.scheduledAt);
+        return [
+          escape(i.student.profile?.fullName ?? ''),
+          escape(i.student.email),
+          escape(i.student.profile?.phoneNumber ?? ''),
+          escape(i.instructor.profile?.fullName ?? ''),
+          escape(i.instructor.email),
+          scheduledAt.toISOString(),
+          String(i.durationMinutes),
+          i.status,
+          escape(i.meetingLink ?? ''),
+          i.attended ? 'Yes' : 'No',
+          i.feedback ? String(i.feedback.overallRating) : '',
+          i.feedback?.submittedAt ? new Date(i.feedback.submittedAt).toISOString() : '',
+        ];
+      });
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map((r) => r.join(',')),
+      ].join('\r\n');
+
+      const filename = `interview-schedule-${new Date().toISOString().slice(0, 10)}.csv`;
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send('\uFEFF' + csvContent);
+    } catch (error: unknown) {
+      console.error('Export interviews error:', error);
+      res.status(500).json({
+        error: 'Failed to export interviews',
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  /**
+   * GET /api/admin/feedback
+   * List all student feedback (admin)
+   */
+  getAllStudentFeedback = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const list = await prisma.studentFeedback.findMany({
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              profile: { select: { fullName: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      res.json(list);
+    } catch (error: unknown) {
+      console.error('Get student feedback error:', error);
+      res.status(500).json({
+        error: 'Failed to fetch feedback',
         details: error instanceof Error ? error.message : String(error),
       });
     }

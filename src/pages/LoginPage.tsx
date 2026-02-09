@@ -123,14 +123,14 @@ const LoginPage: React.FC = () => {
             </div>
             <div className="flex items-center gap-3 text-primary-foreground/90">
               <Award className="w-5 h-5 text-accent" />
-              <span className="text-sm">Certificates</span>
+              <span className="text-sm">Track Progress</span>
             </div>
           </div>
         </div>
 
         <div className="relative z-10">
           <p className="text-sm text-primary-foreground/60">
-            © 2024 DataUniverse. All rights reserved.
+            © 2026 DataUniverse. All rights reserved.
           </p>
         </div>
       </div>

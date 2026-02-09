@@ -121,6 +121,8 @@ class InterviewController {
         whereClause.status = status as InterviewStatus;
       }
 
+      // Instructor: soonest first (asc). Student/Admin: most recent first (desc).
+      const orderByTime = userRole === UserRole.INSTRUCTOR ? 'asc' : 'desc';
       const interviews = await prisma.interview.findMany({
         where: whereClause,
         include: {
@@ -140,7 +142,7 @@ class InterviewController {
           },
           feedback: true,
         },
-        orderBy: { scheduledAt: 'desc' },
+        orderBy: { scheduledAt: orderByTime },
       });
 
       res.json(interviews);

@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Calendar, Plus, Clock, User, Video, Loader2, X } from 'lucide-react';
+import { Calendar, Plus, Clock, User, Video, Loader2, X, Download } from 'lucide-react';
 
 type Student = {
   id: string;
@@ -114,6 +114,24 @@ const AdminInterviews: React.FC = () => {
     setDurationMinutes('60');
     setMeetingLink('');
     setShowDialog(true);
+  };
+
+  const downloadExcel = async () => {
+    try {
+      const res = await api.get('/admin/interviews/export');
+      if (!res.ok) throw new Error('Export failed');
+      const csv = await res.text();
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `interview-schedule-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: 'Downloaded', description: 'Interview schedule exported. Open in Excel or Sheets.' });
+    } catch (e) {
+      toast({ title: 'Export failed', description: 'Could not download interview schedule. Try again.', variant: 'destructive' });
+    }
   };
 
   const scheduleInterview = async () => {
@@ -243,15 +261,21 @@ const AdminInterviews: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-display font-bold text-foreground mb-2">Mock Interviews</h1>
           <p className="text-muted-foreground">Schedule and manage student interviews</p>
         </div>
-        <Button onClick={openDialog}>
-          <Plus className="w-4 h-4 mr-2" />
-          Schedule Interview
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={downloadExcel} className="gap-2">
+            <Download className="w-4 h-4" />
+            Download Excel
+          </Button>
+          <Button onClick={openDialog}>
+            <Plus className="w-4 h-4 mr-2" />
+            Schedule Interview
+          </Button>
+        </div>
       </div>
 
       <div className="bg-card rounded-xl border shadow-card overflow-hidden">

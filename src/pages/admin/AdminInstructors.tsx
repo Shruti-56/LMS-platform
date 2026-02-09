@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { UserPlus, Users, BookOpen, Mail, Loader2 } from 'lucide-react';
+import { UserPlus, Users, Mail, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 
 type Instructor = {
   id: string;
@@ -24,11 +24,15 @@ type Instructor = {
   createdAt: string;
 };
 
+const VISIBLE_STUDENTS_INLINE = 3;
+const EXPANDED_LIST_MAX_HEIGHT = 220;
+
 const AdminInstructors: React.FC = () => {
   const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [expandedInstructorId, setExpandedInstructorId] = useState<string | null>(null);
   
   // Form state
   const [email, setEmail] = useState('');
@@ -185,20 +189,48 @@ const AdminInstructors: React.FC = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 align-top">
                       {instructor.studentsCount === 0 ? (
                         <span className="text-muted-foreground text-sm">No students assigned</span>
                       ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {instructor.students.slice(0, 3).map((student) => (
-                            <Badge key={student.id} variant="outline" className="text-xs">
-                              {student.profile?.fullName || student.email}
-                            </Badge>
-                          ))}
-                          {instructor.studentsCount > 3 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{instructor.studentsCount - 3} more
-                            </Badge>
+                        <div className="min-w-[200px]">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {instructor.students.slice(0, VISIBLE_STUDENTS_INLINE).map((student) => (
+                              <Badge key={student.id} variant="outline" className="text-xs">
+                                {student.profile?.fullName || student.email}
+                              </Badge>
+                            ))}
+                            {instructor.studentsCount > VISIBLE_STUDENTS_INLINE && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                onClick={() => setExpandedInstructorId((id) => (id === instructor.id ? null : instructor.id))}
+                              >
+                                {expandedInstructorId === instructor.id ? (
+                                  <>Show less <ChevronUp className="w-3 h-3 ml-0.5 inline" /></>
+                                ) : (
+                                  <>+{instructor.studentsCount - VISIBLE_STUDENTS_INLINE} more <ChevronDown className="w-3 h-3 ml-0.5 inline" /></>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                          {expandedInstructorId === instructor.id && instructor.students.length > VISIBLE_STUDENTS_INLINE && (
+                            <div
+                              className="mt-2 p-2 rounded-lg border border-border bg-muted/30 overflow-y-auto"
+                              style={{ maxHeight: EXPANDED_LIST_MAX_HEIGHT }}
+                            >
+                              <p className="text-xs font-medium text-muted-foreground mb-2">All assigned students ({instructor.students.length})</p>
+                              <ul className="space-y-1.5">
+                                {instructor.students.map((student) => (
+                                  <li key={student.id} className="text-sm text-foreground flex items-center gap-2">
+                                    <span className="truncate">{student.profile?.fullName || student.email}</span>
+                                    <span className="text-muted-foreground truncate text-xs">({student.email})</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           )}
                         </div>
                       )}

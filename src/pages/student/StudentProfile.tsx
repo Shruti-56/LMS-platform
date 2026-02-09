@@ -10,8 +10,7 @@ import {
   BookOpen, 
   Trophy,
   Award,
-  Edit2,
-  Download
+  Edit2
 } from 'lucide-react';
 
 type Enrollment = {
@@ -119,7 +118,7 @@ const StudentProfile: React.FC = () => {
               <Award className="w-6 h-6 text-accent" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Certificates</p>
+              <p className="text-sm text-muted-foreground">Courses Completed</p>
               <p className="text-2xl font-bold text-foreground">{completedCourses.length}</p>
             </div>
           </div>
@@ -161,42 +160,6 @@ const StudentProfile: React.FC = () => {
         </div>
       </div>
 
-      {/* Certificates */}
-      <div className="bg-card rounded-xl border border-border p-6 shadow-card">
-        <h2 className="text-lg font-semibold text-foreground mb-4">My Certificates</h2>
-        
-        {completedCourses.length === 0 ? (
-          <div className="text-center py-8">
-            <Award className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">
-              Complete a course to earn your first certificate!
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {completedCourses.map(enrollment => (
-              <div 
-                key={enrollment.id}
-                className="flex items-center justify-between p-4 bg-muted/50 rounded-lg"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 gradient-accent rounded-lg flex items-center justify-center">
-                    <Award className="w-5 h-5 text-accent-foreground" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground">{enrollment.course.title}</p>
-                    <p className="text-sm text-muted-foreground">Certificate of Completion</p>
-                  </div>
-                </div>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Download className="w-4 h-4" />
-                  Download
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 };
