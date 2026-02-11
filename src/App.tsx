@@ -51,6 +51,7 @@ import MyCertificates from "./pages/student/MyCertificates";
 import InstructorSubmissions from "./pages/instructor/InstructorSubmissions";
 import InstructorMyStudents from "./pages/instructor/InstructorMyStudents";
 import InstructorInterviews from "./pages/instructor/InstructorInterviews";
+import MarketingLanding from "./pages/MarketingLanding";
 
 const queryClient = new QueryClient();
 
@@ -180,7 +181,7 @@ const AppRoutes = () => {
       <Route path="/" element={
         isAuthenticated 
           ? <Navigate to={userRole === 'admin' ? '/admin/dashboard' : userRole === 'instructor' ? '/instructor/submissions' : '/student/dashboard'} replace />
-          : <Navigate to="/login" replace />
+          : <MarketingLanding />
       } />
       <Route path="/login" element={
         isAuthenticated 

@@ -138,6 +138,12 @@ const LoginPage: React.FC = () => {
       {/* Right Panel - Login Options */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-background">
         <div className="w-full max-w-md space-y-8">
+          {/* Back to marketing home */}
+          <div className="flex justify-start">
+            <Link to="/" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1">
+              ← Back to home
+            </Link>
+          </div>
           {/* Mobile Logo */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
             <div className="w-10 h-10 gradient-primary rounded-xl flex items-center justify-center">

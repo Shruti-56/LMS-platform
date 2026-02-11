@@ -232,15 +232,82 @@ If asked for website URL before hosting:
 
 ---
 
-# 📧 Part 3: Gmail SMTP Setup (Emails)
+# 📧 Part 3: Email Setup (Outlook or Gmail)
 
-## Step 1: Use Existing Gmail or Create New
+You can use **Outlook** (e.g. admin@datauniverse.in) or **Gmail**. Follow either **Part 3a (Outlook)** or **Part 3b (Gmail)**.
+
+---
+
+## Part 3a: Outlook / Microsoft 365 (e.g. admin@datauniverse.in)
+
+Use this if your sending address is **admin@datauniverse.in** (or any Outlook / Microsoft 365 mailbox).
+
+### Step 1: Use your Outlook account
+
+- Your email: **admin@datauniverse.in** (or your Outlook address).
+- You’ll use this account’s password, or an **app password** if you have multi-factor authentication (MFA) enabled.
+
+### Step 2: Allow SMTP / “Authenticated SMTP” (if required)
+
+Some Microsoft 365 / Outlook setups require “Authenticated SMTP” or “SMTP AUTH” to be enabled:
+
+1. Log in to **Microsoft 365 admin center** (if you manage the tenant) or ask your IT admin.
+2. Go to **Users** → **Active users** → select the user (e.g. admin@datauniverse.in) → **Mail** → **Manage email apps**.
+3. Ensure **Authenticated SMTP** is **enabled** (checked). Save if you changed it.
+
+If you don’t have admin access, try with your normal password first; if you get “Authentication failed”, ask your admin to enable SMTP AUTH for this mailbox.
+
+### Step 3: App password (if you have MFA / 2FA)
+
+If **admin@datauniverse.in** has two-factor authentication:
+
+1. Go to **https://account.microsoft.com/security** (signed in as that account).
+2. Under **Security basics** → **App passwords** (or **Advanced security options**), create a new **App password**.
+3. Use that app password in `SMTP_PASS` instead of your normal account password.
+
+If there is no 2FA, you can use your normal Outlook password in `SMTP_PASS`.
+
+### Step 4: Update `backend/.env`
+
+Add or replace with these values in **`backend/.env`**:
+
+```env
+# Outlook / Microsoft 365 (admin@datauniverse.in)
+SMTP_HOST=smtp.office365.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=admin@datauniverse.in
+SMTP_PASS=your_password_or_app_password
+SMTP_FROM=DataUniverse <admin@datauniverse.in>
+```
+
+Replace `your_password_or_app_password` with the account password or the app password from Step 3.
+
+### Step 5: Test email
+
+1. Start backend: `cd backend && npm run dev`
+2. Look for: **✅ Email service ready**
+3. Test: register a new user (welcome email) or use “Forgot password” (reset email).
+
+### Step 6: Troubleshooting Outlook
+
+| Issue | What to do |
+|-------|------------|
+| **“Authentication failed”** | Enable **SMTP AUTH** for the mailbox (Step 2). If MFA is on, use an **App password** (Step 3). |
+| **“Connection timeout” / “ENOTFOUND”** | Confirm `SMTP_HOST=smtp.office365.com` and your network allows outbound port **587**. |
+| **Emails not received** | Check recipient spam folder. For production, add SPF/DKIM for datauniverse.in in DNS. |
+
+---
+
+## Part 3b: Gmail SMTP Setup (Alternative)
+
+### Step 1: Use Existing Gmail or Create New
 
 1. Go to **https://mail.google.com/**
 2. Create new account or use existing one
 3. Recommended: Create a dedicated account like `noreply.datauniverse@gmail.com`
 
-## Step 2: Enable 2-Factor Authentication
+### Step 2: Enable 2-Factor Authentication
 
 **This is REQUIRED to generate App Passwords**
 
@@ -254,7 +321,7 @@ If asked for website URL before hosting:
 7. Enter the verification code sent to your phone
 8. Click **"Turn On"**
 
-## Step 3: Generate App Password
+### Step 3: Generate App Password
 
 1. Go to **https://myaccount.google.com/apppasswords**
    - Or: Google Account → Security → 2-Step Verification → App passwords
@@ -268,7 +335,7 @@ If asked for website URL before hosting:
    - This is shown only once!
    - Example: `abcdefghijklmnop`
 
-## Step 4: Update Your .env File
+### Step 4: Update Your .env File (Gmail)
 
 Add these to `backend/.env`:
 
@@ -285,7 +352,7 @@ Replace:
 - `your_email@gmail.com` with your actual Gmail
 - `abcdefghijklmnop` with your App Password (no spaces)
 
-## Step 5: Test Email Sending
+### Step 5: Test Email Sending
 
 1. Start your backend: `cd backend && npm run dev`
 2. Look for: `✅ Email service ready`
@@ -293,7 +360,7 @@ Replace:
    - Registering a new user (welcome email)
    - Using forgot password (reset email)
 
-## Step 6: Troubleshooting Gmail
+### Step 6: Troubleshooting Gmail
 
 ### Issue: "Email service not configured"
 - Check SMTP_USER and SMTP_PASS are set correctly
@@ -337,13 +404,13 @@ AWS_S3_BUCKET=datauniverse-videos-yourname
 RAZORPAY_KEY_ID=rzp_test_...
 RAZORPAY_KEY_SECRET=...
 
-# Gmail SMTP ✅
-SMTP_HOST=smtp.gmail.com
+# Email (Outlook) ✅
+SMTP_HOST=smtp.office365.com
 SMTP_PORT=587
 SMTP_SECURE=false
-SMTP_USER=your_email@gmail.com
-SMTP_PASS=your_16_char_app_password
-SMTP_FROM=DataUniverse <your_email@gmail.com>
+SMTP_USER=admin@datauniverse.in
+SMTP_PASS=your_password_or_app_password
+SMTP_FROM=DataUniverse <admin@datauniverse.in>
 
 # URLs
 FRONTEND_URL=http://localhost:8080
@@ -364,7 +431,7 @@ VITE_RAZORPAY_KEY_ID=rzp_test_...
 Your DataUniverse LMS is now fully configured with:
 - ✅ AWS S3 for video storage
 - ✅ Razorpay for payments
-- ✅ Gmail for emails
+- ✅ Email (Outlook admin@datauniverse.in or Gmail)
 
 **Test each feature:**
 1. Upload a video (tests S3)
